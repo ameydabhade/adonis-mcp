@@ -17,6 +17,10 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 import talib
 
+# Production-ready imports
+from trading_config import config
+from risk_manager import risk_manager
+
 # MCP imports
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
@@ -36,25 +40,40 @@ from kiteconnect import KiteConnect
 # Load environment variables
 load_dotenv('config.env')
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure production logging
+logging.basicConfig(
+    level=getattr(logging, config.log_level),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(config.log_file),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Initialize Kite Connect
 kite = None
 
 def init_kite():
-    """Initialize Kite Connect instance"""
+    """Initialize Kite Connect instance with production configuration"""
     global kite
-    api_key = os.getenv('KITE_API_KEY')
-    access_token = os.getenv('KITE_ACCESS_TOKEN')
     
-    if not api_key or not access_token:
-        raise ValueError("KITE_API_KEY and KITE_ACCESS_TOKEN must be set in config.env")
+    if not config.api_key or not config.access_token:
+        raise ValueError("API credentials not configured properly")
     
-    kite = KiteConnect(api_key=api_key)
-    kite.set_access_token(access_token)
-    logger.info("Kite Connect initialized successfully")
+    kite = KiteConnect(api_key=config.api_key)
+    kite.set_access_token(config.access_token)
+    
+    logger.info(f"Kite Connect initialized - Environment: {config.environment}")
+    
+    # Validate connection
+    try:
+        profile = kite.profile()
+        logger.info(f"Connected as: {profile.get('user_name')} ({profile.get('user_id')})")
+    except Exception as e:
+        logger.error(f"Connection validation failed: {e}")
+        raise
+    
     return kite
 
 @dataclass
@@ -468,6 +487,20 @@ async def handle_list_tools() -> list[Tool]:
                     }
                 }
             }
+        ),
+        Tool(
+            name="get_risk_status",
+            description="Get comprehensive risk management status and trading limits",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "include_history": {
+                        "type": "boolean",
+                        "description": "Include recent trade history in response",
+                        "default": False
+                    }
+                }
+            }
         )
     ]
 
@@ -495,6 +528,8 @@ async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent
             return await get_positions_tool(arguments)
         elif name == "get_margins":
             return await get_margins_tool(arguments)
+        elif name == "get_risk_status":
+            return await get_risk_status_tool(arguments)
         # Legacy tools for backward compatibility
         elif name == "fetch_data":
             return await get_market_data_tool(arguments)
@@ -795,6 +830,9 @@ async def get_fno_data_tool(arguments: dict) -> list[types.TextContent]:
     expiry_filter = arguments.get("expiry")
     
     try:
+        if not kite:
+            init_kite()
+            
         fno_instruments = get_fno_instruments(symbol)
         
         if not fno_instruments:
@@ -914,6 +952,9 @@ async def calculate_technical_indicators_tool(arguments: dict) -> list[types.Tex
     days = arguments.get("days", 50)
     
     try:
+        if not kite:
+            init_kite()
+            
         # Get instrument details
         instruments = kite.instruments("NSE")
         instrument = None
@@ -979,7 +1020,7 @@ async def calculate_technical_indicators_tool(arguments: dict) -> list[types.Tex
         return [types.TextContent(type="text", text=f"Technical indicators error: {str(e)}")]
 
 async def place_order_tool(arguments: dict) -> list[types.TextContent]:
-    """Unified order placement for equity and F&O"""
+    """Production-grade unified order placement with comprehensive risk management"""
     tradingsymbol = arguments.get("tradingsymbol")
     exchange = arguments.get("exchange", "NSE")
     transaction_type = arguments.get("transaction_type")
@@ -990,6 +1031,9 @@ async def place_order_tool(arguments: dict) -> list[types.TextContent]:
     product = arguments.get("product", "MIS")
     
     try:
+        if not kite:
+            init_kite()
+        
         # Prepare order parameters
         order_params = {
             "variety": "regular",
@@ -1007,12 +1051,54 @@ async def place_order_tool(arguments: dict) -> list[types.TextContent]:
         if order_type.upper() in ["SL", "SL-M"] and trigger_price:
             order_params["trigger_price"] = trigger_price
         
-        # Place order
+        # 🛡️ PRODUCTION RISK MANAGEMENT - Validate order before execution
+        if config.enable_risk_checks:
+            is_valid, validation_message = risk_manager.validate_order(order_params)
+            if not is_valid:
+                logger.warning(f"Order rejected by risk manager: {validation_message}")
+                return [types.TextContent(
+                    type="text",
+                    text=f"🚫 **Order Rejected - Risk Management**\n\n"
+                         f"**Reason:** {validation_message}\n"
+                         f"**Symbol:** {tradingsymbol}\n"
+                         f"**Quantity:** {quantity}\n"
+                         f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                         f"Risk Status: Use get_margins tool to check account status."
+                )]
+        
+        # 🔄 DRY RUN MODE - Simulate order without execution
+        if config.dry_run_mode:
+            fake_order_id = f"DRY_{int(datetime.now().timestamp())}"
+            risk_manager.record_order(order_params, fake_order_id, "DRY_RUN")
+            
+            return [types.TextContent(
+                type="text",
+                text=f"🧪 **DRY RUN - Order Simulated**\n\n"
+                     f"**Simulated Order ID:** {fake_order_id}\n"
+                     f"**Symbol:** {tradingsymbol}\n"
+                     f"**Exchange:** {exchange}\n"
+                     f"**Type:** {transaction_type}\n"
+                     f"**Quantity:** {quantity}\n"
+                     f"**Order Type:** {order_type}\n"
+                     f"**Price:** {'₹' + str(price) if price else 'Market Price'}\n"
+                     f"**Product:** {product}\n"
+                     f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                     f"⚠️ **DRY RUN MODE ACTIVE** - No actual order placed"
+            )]
+        
+        # 🚀 LIVE ORDER EXECUTION
+        logger.info(f"Placing live order: {tradingsymbol} {transaction_type} {quantity}")
         order_id = kite.place_order(**order_params)
+        
+        # Record successful order
+        risk_manager.record_order(order_params, order_id, "PLACED")
+        
+        # Get risk status for reporting
+        risk_status = risk_manager.get_risk_status()
         
         return [types.TextContent(
             type="text",
-            text=f"✅ **Order Placed Successfully**\n\n"
+            text=f"✅ **Live Order Placed Successfully**\n\n"
                  f"**Order ID:** {order_id}\n"
                  f"**Symbol:** {tradingsymbol}\n"
                  f"**Exchange:** {exchange}\n"
@@ -1022,11 +1108,23 @@ async def place_order_tool(arguments: dict) -> list[types.TextContent]:
                  f"**Price:** {'₹' + str(price) if price else 'Market Price'}\n"
                  f"**Product:** {product}\n"
                  f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                 f"📊 **Risk Status:**\n"
+                 f"- Daily Trades: {risk_status['daily_trades']}/{risk_status['daily_trade_limit']}\n"
+                 f"- Daily P&L: ₹{risk_status['daily_pnl']:.2f}\n"
+                 f"- Loss Buffer: ₹{risk_status['remaining_loss_buffer']:.2f}\n\n"
                  f"Use monitor_orders tool to track execution."
         )]
         
     except Exception as e:
-        return [types.TextContent(type="text", text=f"Order placement error: {str(e)}")]
+        logger.error(f"Order placement failed: {e}")
+        
+        # Record failed order attempt
+        try:
+            risk_manager.record_order(order_params, "FAILED", "ERROR")
+        except:
+            pass
+            
+        return [types.TextContent(type="text", text=f"❌ **Order Placement Error:** {str(e)}")]
 
 async def get_positions_tool(arguments: dict) -> list[types.TextContent]:
     """Get current positions"""
@@ -1081,6 +1179,79 @@ async def get_margins_tool(arguments: dict) -> list[types.TextContent]:
         
     except Exception as e:
         return [types.TextContent(type="text", text=f"Margins error: {str(e)}")]
+
+async def get_risk_status_tool(arguments: dict) -> list[types.TextContent]:
+    """Get comprehensive risk management status"""
+    include_history = arguments.get("include_history", False)
+    
+    try:
+        # Get risk status
+        risk_status = risk_manager.get_risk_status()
+        
+        # Market status
+        market_status = "🟢 OPEN" if risk_status['market_open'] else "🔴 CLOSED"
+        circuit_status = "🚨 ACTIVE" if risk_status['circuit_breaker_active'] else "✅ NORMAL"
+        
+        # Build comprehensive status report
+        status_text = f"🛡️ **Risk Management Status**\n\n"
+        
+        # System Status
+        status_text += f"**System Status:**\n"
+        status_text += f"- Environment: {config.environment.upper()}\n"
+        status_text += f"- Market: {market_status}\n"
+        status_text += f"- Circuit Breaker: {circuit_status}\n"
+        status_text += f"- Dry Run Mode: {'🧪 ACTIVE' if config.dry_run_mode else '🚀 LIVE TRADING'}\n\n"
+        
+        # Daily Limits
+        status_text += f"**Daily Limits:**\n"
+        status_text += f"- Trades: {risk_status['daily_trades']}/{risk_status['daily_trade_limit']} "
+        status_text += f"({risk_status['remaining_trade_buffer']} remaining)\n"
+        status_text += f"- P&L: ₹{risk_status['daily_pnl']:.2f}\n"
+        status_text += f"- Loss Buffer: ₹{risk_status['remaining_loss_buffer']:.2f}\n"
+        status_text += f"- Positions: {risk_status['positions_count']}\n\n"
+        
+        # Risk Limits
+        status_text += f"**Risk Configuration:**\n"
+        status_text += f"- Max Daily Loss: ₹{config.risk_limits.max_daily_loss:,.0f}\n"
+        status_text += f"- Max Order Value: ₹{config.risk_limits.max_order_value:,.0f}\n"
+        status_text += f"- Max Orders/Min: {config.risk_limits.max_orders_per_minute}\n"
+        status_text += f"- Order Cooldown: {config.risk_limits.cooldown_between_orders}s\n\n"
+        
+        # Market Hours
+        current_time = datetime.now().strftime("%H:%M:%S")
+        status_text += f"**Market Hours:**\n"
+        status_text += f"- Current Time: {current_time}\n"
+        status_text += f"- Regular Hours: {config.market_hours.market_open} - {config.market_hours.market_close}\n"
+        status_text += f"- Extended Hours: {'Enabled' if config.market_hours.allow_extended_hours else 'Disabled'}\n\n"
+        
+        # Recent activity (if requested)
+        if include_history and risk_manager.trade_history:
+            status_text += f"**Recent Trades (Last 5):**\n"
+            for trade in risk_manager.trade_history[-5:]:
+                status_text += f"- {trade.timestamp.strftime('%H:%M')} {trade.symbol} {trade.transaction_type} {trade.quantity} @ ₹{trade.price}\n"
+            status_text += "\n"
+        
+        # Warnings
+        warnings = []
+        if risk_status['daily_pnl'] < -config.risk_limits.max_daily_loss * 0.8:
+            warnings.append("⚠️ Approaching daily loss limit")
+        if risk_status['daily_trades'] > config.risk_limits.max_daily_trades * 0.9:
+            warnings.append("⚠️ Approaching daily trade limit")
+        if not risk_status['market_open'] and config.enable_market_hours_check:
+            warnings.append("⚠️ Market is closed - orders will be rejected")
+            
+        if warnings:
+            status_text += f"**Warnings:**\n"
+            for warning in warnings:
+                status_text += f"{warning}\n"
+            status_text += "\n"
+        
+        status_text += f"*Status updated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*"
+        
+        return [types.TextContent(type="text", text=status_text)]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Risk status error: {str(e)}")]
 
 async def main():
     """Main function to run the server"""
