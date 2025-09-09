@@ -501,6 +501,50 @@ async def handle_list_tools() -> list[Tool]:
                     }
                 }
             }
+        ),
+        Tool(
+            name="set_stop_loss",
+            description="Set stop loss and target orders for existing positions",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tradingsymbol": {
+                        "type": "string",
+                        "description": "Trading symbol for the position"
+                    },
+                    "stop_loss_price": {
+                        "type": "number",
+                        "description": "Stop loss trigger price"
+                    },
+                    "target_price": {
+                        "type": "number",
+                        "description": "Target profit price (optional)"
+                    },
+                    "quantity": {
+                        "type": "integer",
+                        "description": "Quantity to protect (auto-detect if not provided)"
+                    },
+                    "order_type": {
+                        "type": "string",
+                        "description": "Stop loss order type: SL (Stop Loss) or SL-M (Stop Loss Market)",
+                        "default": "SL-M"
+                    }
+                },
+                "required": ["tradingsymbol", "stop_loss_price"]
+            }
+        ),
+        Tool(
+            name="monitor_stop_orders",
+            description="Monitor active stop loss and target orders",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "tradingsymbol": {
+                        "type": "string",
+                        "description": "Filter by specific trading symbol (optional)"
+                    }
+                }
+            }
         )
     ]
 
@@ -530,6 +574,10 @@ async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent
             return await get_margins_tool(arguments)
         elif name == "get_risk_status":
             return await get_risk_status_tool(arguments)
+        elif name == "set_stop_loss":
+            return await set_stop_loss_tool(arguments)
+        elif name == "monitor_stop_orders":
+            return await monitor_stop_orders_tool(arguments)
         # Legacy tools for backward compatibility
         elif name == "fetch_data":
             return await get_market_data_tool(arguments)
@@ -1252,6 +1300,285 @@ async def get_risk_status_tool(arguments: dict) -> list[types.TextContent]:
         
     except Exception as e:
         return [types.TextContent(type="text", text=f"Risk status error: {str(e)}")]
+
+async def set_stop_loss_tool(arguments: dict) -> list[types.TextContent]:
+    """Set stop loss and target orders for existing positions"""
+    tradingsymbol = arguments.get("tradingsymbol")
+    stop_loss_price = arguments.get("stop_loss_price")
+    target_price = arguments.get("target_price")
+    quantity = arguments.get("quantity")
+    order_type = arguments.get("order_type", "SL-M")
+    
+    try:
+        if not kite:
+            init_kite()
+        
+        # Get current positions to determine position details
+        positions = kite.positions()
+        current_position = None
+        
+        # Find the position for this symbol
+        for pos in positions['day'] + positions['net']:
+            if pos['tradingsymbol'] == tradingsymbol and pos['quantity'] != 0:
+                current_position = pos
+                break
+        
+        if not current_position:
+            return [types.TextContent(
+                type="text",
+                text=f"❌ **No Position Found**\n\n"
+                     f"No active position found for {tradingsymbol}.\n"
+                     f"Stop loss can only be set for existing positions."
+            )]
+        
+        # Auto-detect quantity if not provided
+        if not quantity:
+            quantity = abs(current_position['quantity'])
+        
+        # Determine transaction type based on position
+        position_quantity = current_position['quantity']
+        if position_quantity > 0:
+            # Long position - sell on stop loss
+            transaction_type = "SELL"
+            stop_loss_logic = f"SELL if price falls to ₹{stop_loss_price}"
+        else:
+            # Short position - buy on stop loss  
+            transaction_type = "BUY"
+            stop_loss_logic = f"BUY if price rises to ₹{stop_loss_price}"
+        
+        # Get current market price for validation
+        exchange = "NFO" if any(x in tradingsymbol for x in ['FUT', 'CE', 'PE']) else "NSE"
+        quote = kite.quote(f"{exchange}:{tradingsymbol}")
+        current_price = quote[f"{exchange}:{tradingsymbol}"]["last_price"]
+        
+        # Validate stop loss price logic
+        validation_message = ""
+        if position_quantity > 0 and stop_loss_price >= current_price:
+            validation_message = "⚠️ Stop loss price should be below current price for long positions"
+        elif position_quantity < 0 and stop_loss_price <= current_price:
+            validation_message = "⚠️ Stop loss price should be above current price for short positions"
+        
+        placed_orders = []
+        
+        # Place stop loss order
+        try:
+            # For options, use LIMIT orders instead of SL/SL-M due to liquidity restrictions
+            if any(x in tradingsymbol for x in ['CE', 'PE']):
+                sl_order_params = {
+                    "variety": "regular",
+                    "tradingsymbol": tradingsymbol,
+                    "exchange": exchange,
+                    "transaction_type": transaction_type,
+                    "quantity": quantity,
+                    "order_type": "LIMIT",
+                    "price": stop_loss_price,
+                    "product": current_position.get('product', 'MIS')
+                }
+                stop_loss_logic = f"Manual monitoring required: {transaction_type} at ₹{stop_loss_price} (LIMIT order placed)"
+            else:
+                # For equity/futures, use stop loss orders
+                sl_order_params = {
+                    "variety": "regular",
+                    "tradingsymbol": tradingsymbol,
+                    "exchange": exchange,
+                    "transaction_type": transaction_type,
+                    "quantity": quantity,
+                    "order_type": order_type,
+                    "trigger_price": stop_loss_price,
+                    "product": current_position.get('product', 'MIS')
+                }
+                
+                if order_type == "SL":
+                    # For SL orders, set price slightly worse than trigger
+                    sl_order_params["price"] = stop_loss_price * 0.99 if transaction_type == "SELL" else stop_loss_price * 1.01
+            
+            sl_order_id = kite.place_order(**sl_order_params)
+            placed_orders.append({
+                "type": "Stop Loss",
+                "order_id": sl_order_id,
+                "trigger_price": stop_loss_price,
+                "logic": stop_loss_logic
+            })
+            
+        except Exception as e:
+            return [types.TextContent(
+                type="text",
+                text=f"❌ **Stop Loss Order Failed**\n\n"
+                     f"**Error:** {str(e)}\n"
+                     f"**Symbol:** {tradingsymbol}\n"
+                     f"**Trigger Price:** ₹{stop_loss_price}\n\n"
+                     f"{validation_message}"
+            )]
+        
+        # Place target order if provided
+        if target_price:
+            try:
+                target_order_params = {
+                    "variety": "regular",
+                    "tradingsymbol": tradingsymbol,
+                    "exchange": exchange,
+                    "transaction_type": transaction_type,
+                    "quantity": quantity,
+                    "order_type": "LIMIT",
+                    "price": target_price,
+                    "product": current_position.get('product', 'MIS')
+                }
+                
+                target_order_id = kite.place_order(**target_order_params)
+                target_logic = f"{transaction_type} if price reaches ₹{target_price}"
+                placed_orders.append({
+                    "type": "Target",
+                    "order_id": target_order_id,
+                    "price": target_price,
+                    "logic": target_logic
+                })
+                
+            except Exception as e:
+                # Stop loss placed but target failed
+                placed_orders.append({
+                    "type": "Target",
+                    "error": str(e),
+                    "price": target_price
+                })
+        
+        # Build success response
+        response_text = f"✅ **Stop Loss Orders Placed Successfully**\n\n"
+        response_text += f"**Position Details:**\n"
+        response_text += f"- Symbol: {tradingsymbol}\n"
+        response_text += f"- Current Position: {position_quantity} shares\n"
+        response_text += f"- Current Price: ₹{current_price}\n"
+        response_text += f"- Average Price: ₹{current_position.get('average_price', 0)}\n\n"
+        
+        if validation_message:
+            response_text += f"**Warning:**\n{validation_message}\n\n"
+        
+        response_text += f"**Orders Placed:**\n"
+        for order in placed_orders:
+            if "error" in order:
+                response_text += f"❌ {order['type']}: Failed - {order['error']}\n"
+            else:
+                response_text += f"✅ {order['type']}: Order ID {order['order_id']}\n"
+                response_text += f"   Logic: {order['logic']}\n"
+        
+        response_text += f"\n**Risk Management:**\n"
+        if position_quantity > 0:
+            potential_loss = (current_position.get('average_price', current_price) - stop_loss_price) * quantity
+            response_text += f"- Max Loss Protected: ₹{potential_loss:.2f}\n"
+        else:
+            potential_loss = (stop_loss_price - current_position.get('average_price', current_price)) * quantity  
+            response_text += f"- Max Loss Protected: ₹{potential_loss:.2f}\n"
+        
+        if target_price:
+            if position_quantity > 0:
+                potential_profit = (target_price - current_position.get('average_price', current_price)) * quantity
+            else:
+                potential_profit = (current_position.get('average_price', current_price) - target_price) * quantity
+            response_text += f"- Potential Profit: ₹{potential_profit:.2f}\n"
+        
+        response_text += f"\nUse `monitor_stop_orders` to track these orders."
+        
+        return [types.TextContent(type="text", text=response_text)]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Stop loss setup error: {str(e)}")]
+
+async def monitor_stop_orders_tool(arguments: dict) -> list[types.TextContent]:
+    """Monitor active stop loss and target orders"""
+    filter_symbol = arguments.get("tradingsymbol")
+    
+    try:
+        if not kite:
+            init_kite()
+        
+        # Get all orders
+        all_orders = kite.orders()
+        
+        # Filter for stop loss and target orders
+        stop_orders = []
+        for order in all_orders:
+            # Identify stop loss orders (SL, SL-M) and limit orders that could be targets
+            if (order['order_type'] in ['SL', 'SL-M'] or 
+                (order['order_type'] == 'LIMIT' and order['status'] in ['OPEN', 'TRIGGER PENDING'])):
+                
+                if filter_symbol and order['tradingsymbol'] != filter_symbol:
+                    continue
+                    
+                stop_orders.append(order)
+        
+        if not stop_orders:
+            filter_text = f" for {filter_symbol}" if filter_symbol else ""
+            return [types.TextContent(
+                type="text",
+                text=f"📊 **No Active Stop Orders Found{filter_text}**\n\n"
+                     f"No pending stop loss or target orders found.\n"
+                     f"Use `set_stop_loss` to protect your positions."
+            )]
+        
+        # Group orders by symbol
+        orders_by_symbol = {}
+        for order in stop_orders:
+            symbol = order['tradingsymbol']
+            if symbol not in orders_by_symbol:
+                orders_by_symbol[symbol] = []
+            orders_by_symbol[symbol].append(order)
+        
+        response_text = f"📊 **Active Stop Orders Monitor**\n\n"
+        response_text += f"**Found {len(stop_orders)} active orders across {len(orders_by_symbol)} symbols:**\n\n"
+        
+        for symbol, orders in orders_by_symbol.items():
+            response_text += f"**{symbol}:**\n"
+            
+            # Get current price
+            try:
+                exchange = "NFO" if any(x in symbol for x in ['FUT', 'CE', 'PE']) else "NSE"
+                quote = kite.quote(f"{exchange}:{symbol}")
+                current_price = quote[f"{exchange}:{symbol}"]["last_price"]
+                response_text += f"- Current Price: ₹{current_price}\n"
+            except:
+                current_price = 0
+                response_text += f"- Current Price: Unable to fetch\n"
+            
+            # List orders for this symbol
+            for order in orders:
+                order_type_desc = "🛡️ Stop Loss" if order['order_type'] in ['SL', 'SL-M'] else "🎯 Target"
+                status_icon = "🟢" if order['status'] == 'OPEN' else "🟡" if order['status'] == 'TRIGGER PENDING' else "🔴"
+                
+                response_text += f"  {order_type_desc} {status_icon}\n"
+                response_text += f"    Order ID: {order['order_id']}\n"
+                response_text += f"    Type: {order['transaction_type']} {order['quantity']}\n"
+                response_text += f"    Status: {order['status']}\n"
+                
+                if order['order_type'] in ['SL', 'SL-M']:
+                    response_text += f"    Trigger: ₹{order.get('trigger_price', 'N/A')}\n"
+                    if current_price and order.get('trigger_price'):
+                        distance = abs(current_price - order['trigger_price'])
+                        response_text += f"    Distance: ₹{distance:.2f}\n"
+                else:
+                    response_text += f"    Target: ₹{order.get('price', 'N/A')}\n"
+                    if current_price and order.get('price'):
+                        distance = abs(current_price - order['price'])
+                        response_text += f"    Distance: ₹{distance:.2f}\n"
+                
+                response_text += f"    Time: {order['order_timestamp']}\n"
+                response_text += "\n"
+            
+            response_text += "\n"
+        
+        # Add summary statistics
+        sl_orders = [o for o in stop_orders if o['order_type'] in ['SL', 'SL-M']]
+        target_orders = [o for o in stop_orders if o['order_type'] == 'LIMIT']
+        
+        response_text += f"**Summary:**\n"
+        response_text += f"- Stop Loss Orders: {len(sl_orders)}\n"
+        response_text += f"- Target Orders: {len(target_orders)}\n"
+        response_text += f"- Total Protected Positions: {len(orders_by_symbol)}\n\n"
+        
+        response_text += f"*Monitor updated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*"
+        
+        return [types.TextContent(type="text", text=response_text)]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Stop orders monitor error: {str(e)}")]
 
 async def main():
     """Main function to run the server"""
