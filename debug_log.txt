@@ -1,0 +1,6 @@
+DEBUG: Initializing server 'zerodha-kite-mcp'
+DEBUG: Registering handler for ListToolsRequest
+DEBUG: Registering handler for CallToolRequest
+INFO: Kite Connect initialized successfully
+DEBUG: Using selector: KqueueSelector
+INFO: Kite Connect initialized successfully

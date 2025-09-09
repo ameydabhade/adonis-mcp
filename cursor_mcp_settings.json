@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "zerodha-kite-trading": {
+      "command": "/Users/amey/Desktop/$$$$$$$$/zerodha_mcp_env/bin/python",
+      "args": ["/Users/amey/Desktop/$$$$$$$$/zerodha_mcp_server.py"],
+      "env": {
+        "PATH": "/Users/amey/Desktop/$$$$$$$$/zerodha_mcp_env/bin:/usr/bin:/bin",
+        "VIRTUAL_ENV": "/Users/amey/Desktop/$$$$$$$$/zerodha_mcp_env"
+      }
+    }
+  }
+}
