@@ -9,10 +9,13 @@ import json
 import os
 import asyncio
 import logging
+import numpy as np
+import pandas as pd
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass
 from dotenv import load_dotenv
+import talib
 
 # MCP imports
 from mcp.server.models import InitializationOptions
@@ -63,8 +66,110 @@ class ThinkingStep:
     conclusion: str
     next_action: Optional[str] = None
 
+class TechnicalIndicatorCalculator:
+    """Pure technical indicator calculation without analysis - provides raw data for AI agents"""
+    
+    def calculate_indicators(self, df: pd.DataFrame) -> Dict:
+        """Calculate raw technical indicators - no interpretation, just values"""
+        indicators = {}
+        
+        if len(df) == 0:
+            return {"error": "No data provided"}
+        
+        # Price data
+        close = df['close'].values
+        high = df['high'].values  
+        low = df['low'].values
+        volume = df['volume'].values
+        
+        # Moving Averages
+        indicators['ema_9'] = talib.EMA(close, timeperiod=9).tolist() if len(close) >= 9 else []
+        indicators['ema_21'] = talib.EMA(close, timeperiod=21).tolist() if len(close) >= 21 else []
+        indicators['sma_20'] = talib.SMA(close, timeperiod=20).tolist() if len(close) >= 20 else []
+        indicators['sma_50'] = talib.SMA(close, timeperiod=50).tolist() if len(close) >= 50 else []
+        
+        # Momentum Indicators  
+        indicators['rsi_14'] = talib.RSI(close, timeperiod=14).tolist() if len(close) >= 14 else []
+        
+        # MACD
+        if len(close) >= 26:
+            macd, macd_signal, macd_hist = talib.MACD(close)
+            indicators['macd'] = macd.tolist()
+            indicators['macd_signal'] = macd_signal.tolist()
+            indicators['macd_histogram'] = macd_hist.tolist()
+        else:
+            indicators['macd'] = []
+            indicators['macd_signal'] = []
+            indicators['macd_histogram'] = []
+        
+        # Bollinger Bands
+        if len(close) >= 20:
+            bb_upper, bb_middle, bb_lower = talib.BBANDS(close, timeperiod=20, nbdevup=2, nbdevdn=2)
+            indicators['bb_upper'] = bb_upper.tolist()
+            indicators['bb_middle'] = bb_middle.tolist()
+            indicators['bb_lower'] = bb_lower.tolist()
+        else:
+            indicators['bb_upper'] = []
+            indicators['bb_middle'] = []
+            indicators['bb_lower'] = []
+        
+        # Volatility
+        indicators['atr_14'] = talib.ATR(high, low, close, timeperiod=14).tolist() if len(close) >= 14 else []
+        
+        # Volume indicators
+        if len(volume) >= 10:
+            indicators['volume_sma_10'] = talib.SMA(volume.astype(float), timeperiod=10).tolist()
+        else:
+            indicators['volume_sma_10'] = []
+        
+        # Additional indicators
+        indicators['stoch_k'], indicators['stoch_d'] = talib.STOCH(high, low, close) if len(close) >= 14 else ([], [])
+        indicators['williams_r'] = talib.WILLR(high, low, close, timeperiod=14).tolist() if len(close) >= 14 else []
+        
+        return indicators
+
+def get_fno_instruments(symbol: str) -> List[Dict]:
+    """Get F&O instruments for a symbol"""
+    try:
+        if not kite:
+            init_kite()
+            
+        # Get all instruments
+        nfo_instruments = kite.instruments("NFO")
+        
+        # Filter by symbol - try different matching strategies
+        fno_list = []
+        for inst in nfo_instruments:
+            # For NIFTY, also check for variations like NIFTY50
+            search_terms = [symbol.upper()]
+            if symbol.upper() == "NIFTY":
+                search_terms.extend(["NIFTY50", "NIFTY 50"])
+            elif symbol.upper() == "BANKNIFTY":
+                search_terms.extend(["BANKNIFTY", "NIFTYBANK"])
+            
+            for term in search_terms:
+                if (term in inst['name'].upper() or 
+                    term in inst['tradingsymbol'].upper() or
+                    inst['tradingsymbol'].upper().startswith(term)):
+                    fno_list.append({
+                        'instrument_token': inst['instrument_token'],
+                        'tradingsymbol': inst['tradingsymbol'],
+                        'name': inst['name'],
+                        'expiry': inst['expiry'],
+                        'strike': inst['strike'],
+                        'instrument_type': inst['instrument_type'],  # FUT, CE, PE
+                        'lot_size': inst['lot_size'],
+                        'tick_size': inst['tick_size']
+                    })
+                    break
+        
+        return fno_list
+    except Exception as e:
+        print(f"Error getting F&O instruments: {e}")
+        return []
+
 class SequentialAnalyzer:
-    """Handles sequential thinking analysis of market data"""
+    """Legacy analyzer for backward compatibility"""
     
     def __init__(self):
         self.thinking_steps: List[ThinkingStep] = []
@@ -173,8 +278,9 @@ class SequentialAnalyzer:
                 'suggested_action': 'Monitor for breakout or breakdown signals'
             }
 
-# Global analyzer instance
-analyzer = SequentialAnalyzer()
+# Global instances
+analyzer = SequentialAnalyzer()  # For backward compatibility  
+indicator_calculator = TechnicalIndicatorCalculator()
 
 # Create MCP server
 app = Server("zerodha-kite-mcp")
@@ -184,8 +290,8 @@ async def handle_list_tools() -> list[Tool]:
     """List available tools"""
     return [
         Tool(
-            name="fetch_data",
-            description="Fetch real-time and historical data for stocks/indices like NIFTY",
+            name="get_market_data",
+            description="Get real-time quotes and historical data for equity instruments - raw data for AI analysis",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -195,17 +301,17 @@ async def handle_list_tools() -> list[Tool]:
                     },
                     "exchange": {
                         "type": "string",
-                        "description": "Exchange (NSE, BSE, MCX, etc.)",
+                        "description": "Exchange (NSE, BSE)",
                         "default": "NSE"
                     },
                     "interval": {
                         "type": "string",
-                        "description": "Time interval for historical data (minute, day, 3minute, 5minute, 10minute, 15minute, 30minute, 60minute)",
+                        "description": "Time interval (minute, day, 3minute, 5minute, 15minute, 30minute, 60minute)",
                         "default": "day"
                     },
                     "days": {
                         "type": "integer",
-                        "description": "Number of days of historical data to fetch",
+                        "description": "Number of days of historical data",
                         "default": 30
                     }
                 },
@@ -213,19 +319,65 @@ async def handle_list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="analyze_data",
-            description="Analyze fetched data using sequential thinking process",
+            name="get_fno_data",
+            description="Get futures and options data for F&O trading - includes expiry, strike prices, premiums",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "symbol": {
                         "type": "string",
-                        "description": "Trading symbol to analyze"
+                        "description": "Underlying symbol (e.g., 'NIFTY', 'BANKNIFTY', 'RELIANCE')"
                     },
-                    "analysis_type": {
+                    "instrument_type": {
                         "type": "string",
-                        "description": "Type of analysis (technical, fundamental, sentiment)",
-                        "default": "technical"
+                        "description": "Instrument type: 'FUT' for futures, 'CE' for call options, 'PE' for put options, 'ALL' for all types",
+                        "default": "ALL"
+                    },
+                    "expiry": {
+                        "type": "string",
+                        "description": "Expiry date filter (YYYY-MM-DD format, optional)"
+                    }
+                },
+                "required": ["symbol"]
+            }
+        ),
+        Tool(
+            name="get_options_chain",
+            description="Get complete options chain data with Greeks for options trading analysis",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "Underlying symbol (e.g., 'NIFTY', 'BANKNIFTY')"
+                    },
+                    "expiry": {
+                        "type": "string",
+                        "description": "Expiry date (YYYY-MM-DD format)"
+                    }
+                },
+                "required": ["symbol", "expiry"]
+            }
+        ),
+        Tool(
+            name="calculate_technical_indicators",
+            description="Calculate raw technical indicators (RSI, MACD, etc.) - provides numerical data for AI analysis",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "symbol": {
+                        "type": "string",
+                        "description": "Trading symbol"
+                    },
+                    "interval": {
+                        "type": "string",
+                        "description": "Time interval for analysis",
+                        "default": "day"
+                    },
+                    "days": {
+                        "type": "integer",
+                        "description": "Number of days of data for calculation",
+                        "default": 50
                     }
                 },
                 "required": ["symbol"]
@@ -245,67 +397,76 @@ async def handle_list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="buy_stock",
-            description="Place a buy order for a stock",
+            name="place_order",
+            description="Place orders for equity, futures, or options - unified order placement tool",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "symbol": {
+                    "tradingsymbol": {
                         "type": "string",
-                        "description": "Trading symbol"
+                        "description": "Trading symbol (e.g., 'RELIANCE', 'NIFTY24SEP24FUT', 'NIFTY24SEP2424000CE')"
+                    },
+                    "exchange": {
+                        "type": "string",
+                        "description": "Exchange (NSE for equity, NFO for F&O)",
+                        "default": "NSE"
+                    },
+                    "transaction_type": {
+                        "type": "string",
+                        "description": "BUY or SELL"
                     },
                     "quantity": {
                         "type": "integer",
-                        "description": "Number of shares to buy"
+                        "description": "Quantity (consider lot size for F&O)"
                     },
                     "order_type": {
                         "type": "string",
-                        "description": "Order type (MARKET, LIMIT, SL, SL-M)",
+                        "description": "MARKET, LIMIT, SL, SL-M",
                         "default": "MARKET"
                     },
                     "price": {
                         "type": "number",
                         "description": "Price for LIMIT orders"
                     },
+                    "trigger_price": {
+                        "type": "number",
+                        "description": "Trigger price for SL orders"
+                    },
                     "product": {
                         "type": "string",
-                        "description": "Product type (MIS, CNC, NRML)",
-                        "default": "CNC"
+                        "description": "MIS (intraday), CNC (delivery), NRML (normal F&O)",
+                        "default": "MIS"
                     }
                 },
-                "required": ["symbol", "quantity"]
+                "required": ["tradingsymbol", "transaction_type", "quantity"]
             }
         ),
         Tool(
-            name="sell_stock",
-            description="Place a sell order for a stock",
+            name="get_positions",
+            description="Get current positions (equity and F&O) - raw position data for portfolio analysis",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "symbol": {
+                    "position_type": {
                         "type": "string",
-                        "description": "Trading symbol"
-                    },
-                    "quantity": {
-                        "type": "integer",
-                        "description": "Number of shares to sell"
-                    },
-                    "order_type": {
-                        "type": "string",
-                        "description": "Order type (MARKET, LIMIT, SL, SL-M)",
-                        "default": "MARKET"
-                    },
-                    "price": {
-                        "type": "number",
-                        "description": "Price for LIMIT orders"
-                    },
-                    "product": {
-                        "type": "string",
-                        "description": "Product type (MIS, CNC, NRML)",
-                        "default": "CNC"
+                        "description": "Type of positions: 'day' for intraday, 'net' for overnight, 'all' for both",
+                        "default": "all"
                     }
-                },
-                "required": ["symbol", "quantity"]
+                }
+            }
+        ),
+        Tool(
+            name="get_margins",
+            description="Get account margin details for position sizing calculations",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "segment": {
+                        "type": "string",
+                        "description": "Market segment: 'equity', 'commodity', or 'all'",
+                        "default": "all"
+                    }
+                }
             }
         )
     ]
@@ -318,23 +479,40 @@ async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent
         init_kite()
     
     try:
-        if name == "fetch_data":
-            return await fetch_data_tool(arguments)
-        elif name == "analyze_data":
-            return await analyze_data_tool(arguments)
+        if name == "get_market_data":
+            return await get_market_data_tool(arguments)
+        elif name == "get_fno_data":
+            return await get_fno_data_tool(arguments)
+        elif name == "get_options_chain":
+            return await get_options_chain_tool(arguments)
+        elif name == "calculate_technical_indicators":
+            return await calculate_technical_indicators_tool(arguments)
         elif name == "monitor_orders":
             return await monitor_orders_tool(arguments)
-        elif name == "buy_stock":
-            return await buy_stock_tool(arguments)
-        elif name == "sell_stock":
-            return await sell_stock_tool(arguments)
+        elif name == "place_order":
+            return await place_order_tool(arguments)
+        elif name == "get_positions":
+            return await get_positions_tool(arguments)
+        elif name == "get_margins":
+            return await get_margins_tool(arguments)
+        # Legacy tools for backward compatibility
+        elif name == "fetch_data":
+            return await get_market_data_tool(arguments)
+        elif name == "analyze_data":
+            return await analyze_data_tool(arguments)
+        elif name == "buy_stock" or name == "sell_stock":
+            # Convert old format to new unified format
+            args = arguments.copy()
+            args["tradingsymbol"] = args.pop("symbol", "")
+            args["transaction_type"] = "BUY" if name == "buy_stock" else "SELL"
+            return await place_order_tool(args)
         else:
             return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
     except Exception as e:
         logger.error(f"Error in tool {name}: {str(e)}")
         return [types.TextContent(type="text", text=f"Error: {str(e)}")]
 
-async def fetch_data_tool(arguments: dict) -> list[types.TextContent]:
+async def get_market_data_tool(arguments: dict) -> list[types.TextContent]:
     """Fetch stock/index data"""
     symbol = arguments.get("symbol")
     exchange = arguments.get("exchange", "NSE")
@@ -609,6 +787,300 @@ async def sell_stock_tool(arguments: dict) -> list[types.TextContent]:
         
     except Exception as e:
         return [types.TextContent(type="text", text=f"Sell order error: {str(e)}")]
+
+async def get_fno_data_tool(arguments: dict) -> list[types.TextContent]:
+    """Get F&O instruments data"""
+    symbol = arguments.get("symbol")
+    instrument_type = arguments.get("instrument_type", "ALL")
+    expiry_filter = arguments.get("expiry")
+    
+    try:
+        fno_instruments = get_fno_instruments(symbol)
+        
+        if not fno_instruments:
+            return [types.TextContent(type="text", text=f"No F&O instruments found for {symbol}")]
+        
+        # Filter by instrument type
+        if instrument_type != "ALL":
+            fno_instruments = [inst for inst in fno_instruments if inst['instrument_type'] == instrument_type]
+        
+        # Filter by expiry if provided
+        if expiry_filter:
+            fno_instruments = [inst for inst in fno_instruments if inst['expiry'] == expiry_filter]
+        
+        # Get quotes for current prices
+        result_data = []
+        for inst in fno_instruments[:20]:  # Limit to 20 instruments
+            try:
+                quote_key = f"NFO:{inst['tradingsymbol']}"
+                quote = kite.quote(quote_key)
+                if quote_key in quote:
+                    inst_data = inst.copy()
+                    inst_data.update({
+                        'current_price': quote[quote_key].get('last_price', 0),
+                        'ohlc': quote[quote_key].get('ohlc', {}),
+                        'volume': quote[quote_key].get('volume', 0),
+                        'bid': quote[quote_key].get('depth', {}).get('buy', [{}])[0].get('price', 0),
+                        'ask': quote[quote_key].get('depth', {}).get('sell', [{}])[0].get('price', 0),
+                        'change': quote[quote_key].get('net_change', 0)
+                    })
+                    result_data.append(inst_data)
+            except Exception:
+                result_data.append(inst)  # Add without quote data if quote fails
+        
+        return [types.TextContent(
+            type="text",
+            text=f"📊 **F&O Data for {symbol}**\n\n"
+                 f"**Found {len(result_data)} instruments**\n\n"
+                 f"```json\n{json.dumps(result_data, indent=2, default=str)}\n```"
+        )]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"F&O data error: {str(e)}")]
+
+async def get_options_chain_tool(arguments: dict) -> list[types.TextContent]:
+    """Get options chain data"""
+    symbol = arguments.get("symbol")
+    expiry = arguments.get("expiry")
+    
+    try:
+        # Get options for specific expiry
+        fno_instruments = get_fno_instruments(symbol)
+        
+        # Filter for options with specified expiry
+        options = [inst for inst in fno_instruments 
+                  if inst['instrument_type'] in ['CE', 'PE'] and inst['expiry'] == expiry]
+        
+        if not options:
+            return [types.TextContent(type="text", text=f"No options found for {symbol} expiry {expiry}")]
+        
+        # Get current underlying price
+        underlying_quote = kite.quote(f"NSE:{symbol}")
+        underlying_price = 0
+        if f"NSE:{symbol}" in underlying_quote:
+            underlying_price = underlying_quote[f"NSE:{symbol}"].get('last_price', 0)
+        
+        # Build options chain
+        chain_data = {
+            'underlying': symbol,
+            'underlying_price': underlying_price,
+            'expiry': expiry,
+            'call_options': [],
+            'put_options': []
+        }
+        
+        for option in options[:50]:  # Limit to 50 options
+            try:
+                quote_key = f"NFO:{option['tradingsymbol']}"
+                quote = kite.quote(quote_key)
+                
+                option_data = {
+                    'strike': option['strike'],
+                    'premium': quote[quote_key].get('last_price', 0) if quote_key in quote else 0,
+                    'change': quote[quote_key].get('net_change', 0) if quote_key in quote else 0,
+                    'volume': quote[quote_key].get('volume', 0) if quote_key in quote else 0,
+                    'oi': quote[quote_key].get('oi', 0) if quote_key in quote else 0,
+                    'tradingsymbol': option['tradingsymbol']
+                }
+                
+                if option['instrument_type'] == 'CE':
+                    chain_data['call_options'].append(option_data)
+                else:
+                    chain_data['put_options'].append(option_data)
+                    
+            except Exception:
+                continue
+        
+        # Sort by strike price
+        chain_data['call_options'].sort(key=lambda x: x['strike'])
+        chain_data['put_options'].sort(key=lambda x: x['strike'])
+        
+        return [types.TextContent(
+            type="text",
+            text=f"🔗 **Options Chain for {symbol} - {expiry}**\n\n"
+                 f"**Underlying Price:** ₹{underlying_price}\n"
+                 f"**Calls:** {len(chain_data['call_options'])} options\n"
+                 f"**Puts:** {len(chain_data['put_options'])} options\n\n"
+                 f"```json\n{json.dumps(chain_data, indent=2, default=str)}\n```"
+        )]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Options chain error: {str(e)}")]
+
+async def calculate_technical_indicators_tool(arguments: dict) -> list[types.TextContent]:
+    """Calculate raw technical indicators"""
+    symbol = arguments.get("symbol")
+    interval = arguments.get("interval", "day")
+    days = arguments.get("days", 50)
+    
+    try:
+        # Get instrument details
+        instruments = kite.instruments("NSE")
+        instrument = None
+        
+        for inst in instruments:
+            if symbol.upper() in inst['tradingsymbol'].upper():
+                instrument = inst
+                break
+        
+        if not instrument:
+            return [types.TextContent(type="text", text=f"Instrument {symbol} not found")]
+        
+        # Get historical data
+        from_date = datetime.now() - timedelta(days=days)
+        historical_data = kite.historical_data(
+            instrument_token=instrument['instrument_token'],
+            from_date=from_date,
+            to_date=datetime.now(),
+            interval=interval
+        )
+        
+        if not historical_data:
+            return [types.TextContent(type="text", text=f"No historical data for {symbol}")]
+        
+        # Convert to DataFrame and calculate indicators
+        df = pd.DataFrame(historical_data)
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        global indicator_calculator
+        indicators = indicator_calculator.calculate_indicators(df)
+        
+        if "error" in indicators:
+            return [types.TextContent(type="text", text=f"Indicator calculation error: {indicators['error']}")]
+        
+        # Add current price info
+        current_quote = kite.quote(f"NSE:{instrument['tradingsymbol']}")
+        current_data = current_quote.get(f"NSE:{instrument['tradingsymbol']}", {})
+        
+        result = {
+            'symbol': symbol,
+            'current_price': current_data.get('last_price', 0),
+            'current_change': current_data.get('net_change', 0),
+            'volume': current_data.get('volume', 0),
+            'technical_indicators': indicators,
+            'data_points': len(df),
+            'calculation_time': datetime.now().isoformat()
+        }
+        
+        return [types.TextContent(
+            type="text",
+            text=f"📈 **Technical Indicators for {symbol}**\n\n"
+                 f"**Current Price:** ₹{current_data.get('last_price', 0)}\n"
+                 f"**Change:** {current_data.get('net_change', 0)}\n"
+                 f"**Data Points:** {len(df)} periods\n\n"
+                 f"**Raw Indicator Values:**\n"
+                 f"```json\n{json.dumps(result, indent=2, default=str)}\n```\n\n"
+                 f"*Note: These are raw numerical values for AI analysis. No interpretations provided.*"
+        )]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Technical indicators error: {str(e)}")]
+
+async def place_order_tool(arguments: dict) -> list[types.TextContent]:
+    """Unified order placement for equity and F&O"""
+    tradingsymbol = arguments.get("tradingsymbol")
+    exchange = arguments.get("exchange", "NSE")
+    transaction_type = arguments.get("transaction_type")
+    quantity = arguments.get("quantity")
+    order_type = arguments.get("order_type", "MARKET")
+    price = arguments.get("price")
+    trigger_price = arguments.get("trigger_price")
+    product = arguments.get("product", "MIS")
+    
+    try:
+        # Prepare order parameters
+        order_params = {
+            "variety": "regular",
+            "tradingsymbol": tradingsymbol,
+            "exchange": exchange,
+            "transaction_type": transaction_type.upper(),
+            "quantity": quantity,
+            "order_type": order_type.upper(),
+            "product": product.upper()
+        }
+        
+        if order_type.upper() == "LIMIT" and price:
+            order_params["price"] = price
+        
+        if order_type.upper() in ["SL", "SL-M"] and trigger_price:
+            order_params["trigger_price"] = trigger_price
+        
+        # Place order
+        order_id = kite.place_order(**order_params)
+        
+        return [types.TextContent(
+            type="text",
+            text=f"✅ **Order Placed Successfully**\n\n"
+                 f"**Order ID:** {order_id}\n"
+                 f"**Symbol:** {tradingsymbol}\n"
+                 f"**Exchange:** {exchange}\n"
+                 f"**Type:** {transaction_type}\n"
+                 f"**Quantity:** {quantity}\n"
+                 f"**Order Type:** {order_type}\n"
+                 f"**Price:** {'₹' + str(price) if price else 'Market Price'}\n"
+                 f"**Product:** {product}\n"
+                 f"**Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                 f"Use monitor_orders tool to track execution."
+        )]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Order placement error: {str(e)}")]
+
+async def get_positions_tool(arguments: dict) -> list[types.TextContent]:
+    """Get current positions"""
+    position_type = arguments.get("position_type", "all")
+    
+    try:
+        if position_type == "all":
+            day_positions = kite.positions()['day']
+            net_positions = kite.positions()['net']
+            
+            result = {
+                'day_positions': day_positions,
+                'net_positions': net_positions,
+                'total_day_positions': len(day_positions),
+                'total_net_positions': len(net_positions),
+                'timestamp': datetime.now().isoformat()
+            }
+        else:
+            positions = kite.positions()[position_type]
+            result = {
+                f'{position_type}_positions': positions,
+                f'total_{position_type}_positions': len(positions),
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        return [types.TextContent(
+            type="text",
+            text=f"📊 **Current Positions**\n\n"
+                 f"```json\n{json.dumps(result, indent=2, default=str)}\n```"
+        )]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Positions error: {str(e)}")]
+
+async def get_margins_tool(arguments: dict) -> list[types.TextContent]:
+    """Get account margins"""
+    segment = arguments.get("segment", "all")
+    
+    try:
+        margins = kite.margins()
+        
+        if segment == "all":
+            result = margins
+        else:
+            result = margins.get(segment, {})
+        
+        return [types.TextContent(
+            type="text",
+            text=f"💰 **Account Margins**\n\n"
+                 f"```json\n{json.dumps(result, indent=2, default=str)}\n```"
+        )]
+        
+    except Exception as e:
+        return [types.TextContent(type="text", text=f"Margins error: {str(e)}")]
 
 async def main():
     """Main function to run the server"""
