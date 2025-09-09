@@ -7,8 +7,9 @@ Your Zerodha Kite Connect MCP Server is now fully operational and integrated wit
 ## 📁 **Final Directory Structure**
 
 ```
-/Users/amey/Desktop/$$$$$$$$/
+/Users/amey/Desktop/zerodha-kite-mcp-server/
 ├── 📄 zerodha_mcp_server.py          # Main MCP server (CORE FILE)
+├── 🔧 zerodha_mcp_wrapper.py         # MCP wrapper script
 ├── 🔐 config.env                     # API credentials (KEEP SECURE)
 ├── 📦 requirements.txt               # Python dependencies
 ├── 🌍 zerodha_mcp_env/               # Virtual environment
@@ -21,11 +22,6 @@ Your Zerodha Kite Connect MCP Server is now fully operational and integrated wit
 ├── 🔍 TROUBLESHOOTING_STEPS.md       # Debug guide
 ├── 📝 FINAL_SETUP.md                 # This file
 └── 🚫 .gitignore                     # Security settings
-```
-
-**External File:**
-```
-/Users/amey/zerodha_mcp_wrapper.py    # MCP wrapper script
 ```
 
 ## 🛠️ **Available Tools (All Working ✅)**
@@ -113,7 +109,7 @@ Parameters: symbol, quantity, order_type, price, product
   "zerodha-kite-trading": {
     "type": "stdio",
     "command": "python3", 
-    "args": ["/Users/amey/zerodha_mcp_wrapper.py"],
+    "args": ["/Users/amey/Desktop/zerodha-kite-mcp-server/zerodha_mcp_wrapper.py"],
     "env": {}
   }
 }
