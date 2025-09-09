@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Zerodha Kite Connect Access Token Generator
 This script helps generate and update access tokens for the MCP server.
@@ -13,7 +12,6 @@ from dotenv import load_dotenv, set_key
 def generate_access_token():
     """Generate access token for Kite Connect"""
     
-    # Load environment variables
     load_dotenv('config.env')
     
     api_key = os.getenv('KITE_API_KEY')
@@ -23,10 +21,8 @@ def generate_access_token():
         print("❌ Error: KITE_API_KEY and KITE_API_SECRET must be set in config.env")
         return False
     
-    # Initialize Kite Connect
     kite = KiteConnect(api_key=api_key)
     
-    # Step 1: Get login URL
     login_url = kite.login_url()
     print(f"🌐 Opening login URL in browser...")
     print(f"Login URL: {login_url}")
@@ -36,7 +32,6 @@ def generate_access_token():
     except:
         print("⚠️ Could not open browser automatically. Please copy the URL above and open it manually.")
     
-    # Step 2: Get request token from user
     print("\n📝 After logging in, you'll be redirected to a URL with 'request_token' parameter.")
     print("Copy the request_token value from the redirected URL.")
     print("Example: https://example.com?request_token=ABC123&action=login&status=success")
@@ -49,11 +44,9 @@ def generate_access_token():
         return False
     
     try:
-        # Step 3: Generate access token
         data = kite.generate_session(request_token, api_secret=api_secret)
         access_token = data["access_token"]
         
-        # Step 4: Update config.env file
         set_key('config.env', 'KITE_ACCESS_TOKEN', access_token)
         
         print(f"\n✅ Success! Access token generated and saved to config.env")
@@ -62,7 +55,6 @@ def generate_access_token():
         print(f"📧 Email: {data.get('email', 'N/A')}")
         print(f"📱 Phone: {data.get('phone', 'N/A')}")
         
-        # Step 5: Test the connection
         kite.set_access_token(access_token)
         profile = kite.profile()
         print(f"\n🎯 Connection test successful!")

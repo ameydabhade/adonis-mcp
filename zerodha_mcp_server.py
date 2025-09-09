@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Zerodha Kite Connect MCP Server
 Provides tools for fetching stock data, analyzing with sequential thinking, 
@@ -17,11 +16,9 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 import talib
 
-# Production-ready imports
 from trading_config import config
 from risk_manager import risk_manager
 
-# MCP imports
 from mcp.server.models import InitializationOptions
 from mcp.server import NotificationOptions, Server
 from mcp.types import (
@@ -34,13 +31,10 @@ from mcp.types import (
 )
 import mcp.types as types
 
-# Kite Connect imports
 from kiteconnect import KiteConnect
 
-# Load environment variables
 load_dotenv('config.env')
 
-# Configure production logging
 logging.basicConfig(
     level=getattr(logging, config.log_level),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -51,7 +45,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Kite Connect
 kite = None
 
 def init_kite():
@@ -66,7 +59,6 @@ def init_kite():
     
     logger.info(f"Kite Connect initialized - Environment: {config.environment}")
     
-    # Validate connection
     try:
         profile = kite.profile()
         logger.info(f"Connected as: {profile.get('user_name')} ({profile.get('user_id')})")
@@ -95,22 +87,18 @@ class TechnicalIndicatorCalculator:
         if len(df) == 0:
             return {"error": "No data provided"}
         
-        # Price data
         close = df['close'].values
         high = df['high'].values  
         low = df['low'].values
         volume = df['volume'].values
         
-        # Moving Averages
         indicators['ema_9'] = talib.EMA(close, timeperiod=9).tolist() if len(close) >= 9 else []
         indicators['ema_21'] = talib.EMA(close, timeperiod=21).tolist() if len(close) >= 21 else []
         indicators['sma_20'] = talib.SMA(close, timeperiod=20).tolist() if len(close) >= 20 else []
         indicators['sma_50'] = talib.SMA(close, timeperiod=50).tolist() if len(close) >= 50 else []
         
-        # Momentum Indicators  
         indicators['rsi_14'] = talib.RSI(close, timeperiod=14).tolist() if len(close) >= 14 else []
         
-        # MACD
         if len(close) >= 26:
             macd, macd_signal, macd_hist = talib.MACD(close)
             indicators['macd'] = macd.tolist()
@@ -121,7 +109,6 @@ class TechnicalIndicatorCalculator:
             indicators['macd_signal'] = []
             indicators['macd_histogram'] = []
         
-        # Bollinger Bands
         if len(close) >= 20:
             bb_upper, bb_middle, bb_lower = talib.BBANDS(close, timeperiod=20, nbdevup=2, nbdevdn=2)
             indicators['bb_upper'] = bb_upper.tolist()
@@ -132,16 +119,13 @@ class TechnicalIndicatorCalculator:
             indicators['bb_middle'] = []
             indicators['bb_lower'] = []
         
-        # Volatility
         indicators['atr_14'] = talib.ATR(high, low, close, timeperiod=14).tolist() if len(close) >= 14 else []
         
-        # Volume indicators
         if len(volume) >= 10:
             indicators['volume_sma_10'] = talib.SMA(volume.astype(float), timeperiod=10).tolist()
         else:
             indicators['volume_sma_10'] = []
         
-        # Additional indicators
         indicators['stoch_k'], indicators['stoch_d'] = talib.STOCH(high, low, close) if len(close) >= 14 else ([], [])
         indicators['williams_r'] = talib.WILLR(high, low, close, timeperiod=14).tolist() if len(close) >= 14 else []
         
@@ -153,13 +137,10 @@ def get_fno_instruments(symbol: str) -> List[Dict]:
         if not kite:
             init_kite()
             
-        # Get all instruments
         nfo_instruments = kite.instruments("NFO")
         
-        # Filter by symbol - try different matching strategies
         fno_list = []
         for inst in nfo_instruments:
-            # For NIFTY, also check for variations like NIFTY50
             search_terms = [symbol.upper()]
             if symbol.upper() == "NIFTY":
                 search_terms.extend(["NIFTY50", "NIFTY 50"])
@@ -210,7 +191,6 @@ class SequentialAnalyzer:
     def analyze_price_data(self, instrument_data: Dict, historical_data: List[Dict]) -> Dict:
         """Perform sequential thinking analysis on price data"""
         
-        # Step 1: Current Price Analysis
         current_price = instrument_data.get('last_price', 0)
         prev_close = instrument_data.get('ohlc', {}).get('close', 0)
         change_percent = ((current_price - prev_close) / prev_close * 100) if prev_close else 0
@@ -222,7 +202,6 @@ class SequentialAnalyzer:
             next_action="Analyze historical trends"
         )
         
-        # Step 2: Historical Trend Analysis
         if historical_data and len(historical_data) >= 5:
             recent_closes = [candle['close'] for candle in historical_data[-5:]]
             trend = "Upward" if recent_closes[-1] > recent_closes[0] else "Downward"
@@ -235,7 +214,6 @@ class SequentialAnalyzer:
                 next_action="Evaluate volume patterns"
             )
         
-        # Step 3: Volume Analysis
         volume = instrument_data.get('volume', 0)
         avg_volume = instrument_data.get('average_price', 0)  # Using as proxy
         
@@ -246,7 +224,6 @@ class SequentialAnalyzer:
             next_action="Generate trading recommendation"
         )
         
-        # Step 4: Final Recommendation
         recommendation = self._generate_recommendation(change_percent, trend if 'trend' in locals() else 'Neutral', volume)
         
         step4 = self.add_thinking_step(
@@ -297,11 +274,9 @@ class SequentialAnalyzer:
                 'suggested_action': 'Monitor for breakout or breakdown signals'
             }
 
-# Global instances
 analyzer = SequentialAnalyzer()  # For backward compatibility  
 indicator_calculator = TechnicalIndicatorCalculator()
 
-# Create MCP server
 app = Server("zerodha-kite-mcp")
 
 @app.list_tools()
@@ -578,13 +553,11 @@ async def handle_call_tool(name: str, arguments: dict) -> list[types.TextContent
             return await set_stop_loss_tool(arguments)
         elif name == "monitor_stop_orders":
             return await monitor_stop_orders_tool(arguments)
-        # Legacy tools for backward compatibility
         elif name == "fetch_data":
             return await get_market_data_tool(arguments)
         elif name == "analyze_data":
             return await analyze_data_tool(arguments)
         elif name == "buy_stock" or name == "sell_stock":
-            # Convert old format to new unified format
             args = arguments.copy()
             args["tradingsymbol"] = args.pop("symbol", "")
             args["transaction_type"] = "BUY" if name == "buy_stock" else "SELL"
@@ -603,7 +576,6 @@ async def get_market_data_tool(arguments: dict) -> list[types.TextContent]:
     days = arguments.get("days", 30)
     
     try:
-        # Get instrument token
         instruments = kite.instruments(exchange)
         instrument = None
         
@@ -617,10 +589,8 @@ async def get_market_data_tool(arguments: dict) -> list[types.TextContent]:
         
         instrument_token = instrument['instrument_token']
         
-        # Get current quote
         quote = kite.quote(f"{exchange}:{instrument['tradingsymbol']}")
         
-        # Get historical data
         from_date = datetime.now() - timedelta(days=days)
         to_date = datetime.now()
         
@@ -659,14 +629,10 @@ async def analyze_data_tool(arguments: dict) -> list[types.TextContent]:
     analysis_type = arguments.get("analysis_type", "technical")
     
     try:
-        # First fetch the data
         fetch_args = {"symbol": symbol, "days": 10}
         data_result = await fetch_data_tool(fetch_args)
         
-        # Extract data from the result (this is a simplified approach)
-        # In a real implementation, you'd parse the JSON from the previous result
         
-        # Get fresh data for analysis
         instruments = kite.instruments("NSE")
         instrument = None
         
@@ -678,11 +644,9 @@ async def analyze_data_tool(arguments: dict) -> list[types.TextContent]:
         if not instrument:
             return [types.TextContent(type="text", text=f"Cannot analyze: {symbol} not found")]
         
-        # Get current quote and historical data
         quote_data = kite.quote(f"NSE:{instrument['tradingsymbol']}")
         instrument_data = quote_data[f"NSE:{instrument['tradingsymbol']}"]
         
-        # Get historical data
         from_date = datetime.now() - timedelta(days=10)
         historical_data = kite.historical_data(
             instrument_token=instrument['instrument_token'],
@@ -691,12 +655,10 @@ async def analyze_data_tool(arguments: dict) -> list[types.TextContent]:
             interval="day"
         )
         
-        # Perform sequential thinking analysis
         global analyzer
         analyzer = SequentialAnalyzer()  # Reset for new analysis
         analysis_result = analyzer.analyze_price_data(instrument_data, historical_data)
         
-        # Format the thinking steps
         thinking_steps_text = ""
         for step in analysis_result['thinking_steps']:
             thinking_steps_text += f"**Step {step['step']}:** {step['thought']}\n"
@@ -735,14 +697,12 @@ async def monitor_orders_tool(arguments: dict) -> list[types.TextContent]:
     
     try:
         if order_id:
-            # Get specific order
             order_history = kite.order_history(order_id)
             return [types.TextContent(
                 type="text",
                 text=f"📊 **Order {order_id} Status:**\n\n```json\n{json.dumps(order_history, indent=2, default=str)}\n```"
             )]
         else:
-            # Get all orders
             orders = kite.orders()
             
             if not orders:
@@ -772,7 +732,6 @@ async def buy_stock_tool(arguments: dict) -> list[types.TextContent]:
     product = arguments.get("product", "CNC")
     
     try:
-        # Get instrument details
         instruments = kite.instruments("NSE")
         instrument = None
         
@@ -784,7 +743,6 @@ async def buy_stock_tool(arguments: dict) -> list[types.TextContent]:
         if not instrument:
             return [types.TextContent(type="text", text=f"Cannot buy: {symbol} not found")]
         
-        # Prepare order parameters
         order_params = {
             "variety": "regular",
             "tradingsymbol": instrument['tradingsymbol'],
@@ -798,7 +756,6 @@ async def buy_stock_tool(arguments: dict) -> list[types.TextContent]:
         if order_type == "LIMIT" and price:
             order_params["price"] = price
         
-        # Place order
         order_id = kite.place_order(**order_params)
         
         return [types.TextContent(
@@ -826,7 +783,6 @@ async def sell_stock_tool(arguments: dict) -> list[types.TextContent]:
     product = arguments.get("product", "CNC")
     
     try:
-        # Get instrument details
         instruments = kite.instruments("NSE")
         instrument = None
         
@@ -838,7 +794,6 @@ async def sell_stock_tool(arguments: dict) -> list[types.TextContent]:
         if not instrument:
             return [types.TextContent(type="text", text=f"Cannot sell: {symbol} not found")]
         
-        # Prepare order parameters
         order_params = {
             "variety": "regular",
             "tradingsymbol": instrument['tradingsymbol'],
@@ -852,7 +807,6 @@ async def sell_stock_tool(arguments: dict) -> list[types.TextContent]:
         if order_type == "LIMIT" and price:
             order_params["price"] = price
         
-        # Place order
         order_id = kite.place_order(**order_params)
         
         return [types.TextContent(
@@ -886,15 +840,12 @@ async def get_fno_data_tool(arguments: dict) -> list[types.TextContent]:
         if not fno_instruments:
             return [types.TextContent(type="text", text=f"No F&O instruments found for {symbol}")]
         
-        # Filter by instrument type
         if instrument_type != "ALL":
             fno_instruments = [inst for inst in fno_instruments if inst['instrument_type'] == instrument_type]
         
-        # Filter by expiry if provided
         if expiry_filter:
             fno_instruments = [inst for inst in fno_instruments if inst['expiry'] == expiry_filter]
         
-        # Get quotes for current prices
         result_data = []
         for inst in fno_instruments[:20]:  # Limit to 20 instruments
             try:
@@ -930,23 +881,19 @@ async def get_options_chain_tool(arguments: dict) -> list[types.TextContent]:
     expiry = arguments.get("expiry")
     
     try:
-        # Get options for specific expiry
         fno_instruments = get_fno_instruments(symbol)
         
-        # Filter for options with specified expiry
         options = [inst for inst in fno_instruments 
                   if inst['instrument_type'] in ['CE', 'PE'] and inst['expiry'] == expiry]
         
         if not options:
             return [types.TextContent(type="text", text=f"No options found for {symbol} expiry {expiry}")]
         
-        # Get current underlying price
         underlying_quote = kite.quote(f"NSE:{symbol}")
         underlying_price = 0
         if f"NSE:{symbol}" in underlying_quote:
             underlying_price = underlying_quote[f"NSE:{symbol}"].get('last_price', 0)
         
-        # Build options chain
         chain_data = {
             'underlying': symbol,
             'underlying_price': underlying_price,
@@ -977,7 +924,6 @@ async def get_options_chain_tool(arguments: dict) -> list[types.TextContent]:
             except Exception:
                 continue
         
-        # Sort by strike price
         chain_data['call_options'].sort(key=lambda x: x['strike'])
         chain_data['put_options'].sort(key=lambda x: x['strike'])
         
@@ -1003,7 +949,6 @@ async def calculate_technical_indicators_tool(arguments: dict) -> list[types.Tex
         if not kite:
             init_kite()
             
-        # Get instrument details
         instruments = kite.instruments("NSE")
         instrument = None
         
@@ -1015,7 +960,6 @@ async def calculate_technical_indicators_tool(arguments: dict) -> list[types.Tex
         if not instrument:
             return [types.TextContent(type="text", text=f"Instrument {symbol} not found")]
         
-        # Get historical data
         from_date = datetime.now() - timedelta(days=days)
         historical_data = kite.historical_data(
             instrument_token=instrument['instrument_token'],
@@ -1027,7 +971,6 @@ async def calculate_technical_indicators_tool(arguments: dict) -> list[types.Tex
         if not historical_data:
             return [types.TextContent(type="text", text=f"No historical data for {symbol}")]
         
-        # Convert to DataFrame and calculate indicators
         df = pd.DataFrame(historical_data)
         for col in ['open', 'high', 'low', 'close', 'volume']:
             if col in df.columns:
@@ -1039,7 +982,6 @@ async def calculate_technical_indicators_tool(arguments: dict) -> list[types.Tex
         if "error" in indicators:
             return [types.TextContent(type="text", text=f"Indicator calculation error: {indicators['error']}")]
         
-        # Add current price info
         current_quote = kite.quote(f"NSE:{instrument['tradingsymbol']}")
         current_data = current_quote.get(f"NSE:{instrument['tradingsymbol']}", {})
         
@@ -1082,7 +1024,6 @@ async def place_order_tool(arguments: dict) -> list[types.TextContent]:
         if not kite:
             init_kite()
         
-        # Prepare order parameters
         order_params = {
             "variety": "regular",
             "tradingsymbol": tradingsymbol,
@@ -1099,7 +1040,6 @@ async def place_order_tool(arguments: dict) -> list[types.TextContent]:
         if order_type.upper() in ["SL", "SL-M"] and trigger_price:
             order_params["trigger_price"] = trigger_price
         
-        # 🛡️ PRODUCTION RISK MANAGEMENT - Validate order before execution
         if config.enable_risk_checks:
             is_valid, validation_message = risk_manager.validate_order(order_params)
             if not is_valid:
@@ -1114,7 +1054,6 @@ async def place_order_tool(arguments: dict) -> list[types.TextContent]:
                          f"Risk Status: Use get_margins tool to check account status."
                 )]
         
-        # 🔄 DRY RUN MODE - Simulate order without execution
         if config.dry_run_mode:
             fake_order_id = f"DRY_{int(datetime.now().timestamp())}"
             risk_manager.record_order(order_params, fake_order_id, "DRY_RUN")
@@ -1134,14 +1073,11 @@ async def place_order_tool(arguments: dict) -> list[types.TextContent]:
                      f"⚠️ **DRY RUN MODE ACTIVE** - No actual order placed"
             )]
         
-        # 🚀 LIVE ORDER EXECUTION
         logger.info(f"Placing live order: {tradingsymbol} {transaction_type} {quantity}")
         order_id = kite.place_order(**order_params)
         
-        # Record successful order
         risk_manager.record_order(order_params, order_id, "PLACED")
         
-        # Get risk status for reporting
         risk_status = risk_manager.get_risk_status()
         
         return [types.TextContent(
@@ -1166,7 +1102,6 @@ async def place_order_tool(arguments: dict) -> list[types.TextContent]:
     except Exception as e:
         logger.error(f"Order placement failed: {e}")
         
-        # Record failed order attempt
         try:
             risk_manager.record_order(order_params, "FAILED", "ERROR")
         except:
@@ -1233,24 +1168,19 @@ async def get_risk_status_tool(arguments: dict) -> list[types.TextContent]:
     include_history = arguments.get("include_history", False)
     
     try:
-        # Get risk status
         risk_status = risk_manager.get_risk_status()
         
-        # Market status
         market_status = "🟢 OPEN" if risk_status['market_open'] else "🔴 CLOSED"
         circuit_status = "🚨 ACTIVE" if risk_status['circuit_breaker_active'] else "✅ NORMAL"
         
-        # Build comprehensive status report
         status_text = f"🛡️ **Risk Management Status**\n\n"
         
-        # System Status
         status_text += f"**System Status:**\n"
         status_text += f"- Environment: {config.environment.upper()}\n"
         status_text += f"- Market: {market_status}\n"
         status_text += f"- Circuit Breaker: {circuit_status}\n"
         status_text += f"- Dry Run Mode: {'🧪 ACTIVE' if config.dry_run_mode else '🚀 LIVE TRADING'}\n\n"
         
-        # Daily Limits
         status_text += f"**Daily Limits:**\n"
         status_text += f"- Trades: {risk_status['daily_trades']}/{risk_status['daily_trade_limit']} "
         status_text += f"({risk_status['remaining_trade_buffer']} remaining)\n"
@@ -1258,28 +1188,24 @@ async def get_risk_status_tool(arguments: dict) -> list[types.TextContent]:
         status_text += f"- Loss Buffer: ₹{risk_status['remaining_loss_buffer']:.2f}\n"
         status_text += f"- Positions: {risk_status['positions_count']}\n\n"
         
-        # Risk Limits
         status_text += f"**Risk Configuration:**\n"
         status_text += f"- Max Daily Loss: ₹{config.risk_limits.max_daily_loss:,.0f}\n"
         status_text += f"- Max Order Value: ₹{config.risk_limits.max_order_value:,.0f}\n"
         status_text += f"- Max Orders/Min: {config.risk_limits.max_orders_per_minute}\n"
         status_text += f"- Order Cooldown: {config.risk_limits.cooldown_between_orders}s\n\n"
         
-        # Market Hours
         current_time = datetime.now().strftime("%H:%M:%S")
         status_text += f"**Market Hours:**\n"
         status_text += f"- Current Time: {current_time}\n"
         status_text += f"- Regular Hours: {config.market_hours.market_open} - {config.market_hours.market_close}\n"
         status_text += f"- Extended Hours: {'Enabled' if config.market_hours.allow_extended_hours else 'Disabled'}\n\n"
         
-        # Recent activity (if requested)
         if include_history and risk_manager.trade_history:
             status_text += f"**Recent Trades (Last 5):**\n"
             for trade in risk_manager.trade_history[-5:]:
                 status_text += f"- {trade.timestamp.strftime('%H:%M')} {trade.symbol} {trade.transaction_type} {trade.quantity} @ ₹{trade.price}\n"
             status_text += "\n"
         
-        # Warnings
         warnings = []
         if risk_status['daily_pnl'] < -config.risk_limits.max_daily_loss * 0.8:
             warnings.append("⚠️ Approaching daily loss limit")
@@ -1313,11 +1239,9 @@ async def set_stop_loss_tool(arguments: dict) -> list[types.TextContent]:
         if not kite:
             init_kite()
         
-        # Get current positions to determine position details
         positions = kite.positions()
         current_position = None
         
-        # Find the position for this symbol
         for pos in positions['day'] + positions['net']:
             if pos['tradingsymbol'] == tradingsymbol and pos['quantity'] != 0:
                 current_position = pos
@@ -1331,27 +1255,21 @@ async def set_stop_loss_tool(arguments: dict) -> list[types.TextContent]:
                      f"Stop loss can only be set for existing positions."
             )]
         
-        # Auto-detect quantity if not provided
         if not quantity:
             quantity = abs(current_position['quantity'])
         
-        # Determine transaction type based on position
         position_quantity = current_position['quantity']
         if position_quantity > 0:
-            # Long position - sell on stop loss
             transaction_type = "SELL"
             stop_loss_logic = f"SELL if price falls to ₹{stop_loss_price}"
         else:
-            # Short position - buy on stop loss  
             transaction_type = "BUY"
             stop_loss_logic = f"BUY if price rises to ₹{stop_loss_price}"
         
-        # Get current market price for validation
         exchange = "NFO" if any(x in tradingsymbol for x in ['FUT', 'CE', 'PE']) else "NSE"
         quote = kite.quote(f"{exchange}:{tradingsymbol}")
         current_price = quote[f"{exchange}:{tradingsymbol}"]["last_price"]
         
-        # Validate stop loss price logic
         validation_message = ""
         if position_quantity > 0 and stop_loss_price >= current_price:
             validation_message = "⚠️ Stop loss price should be below current price for long positions"
@@ -1360,9 +1278,7 @@ async def set_stop_loss_tool(arguments: dict) -> list[types.TextContent]:
         
         placed_orders = []
         
-        # Place stop loss order
         try:
-            # For options, use LIMIT orders instead of SL/SL-M due to liquidity restrictions
             if any(x in tradingsymbol for x in ['CE', 'PE']):
                 sl_order_params = {
                     "variety": "regular",
@@ -1376,7 +1292,6 @@ async def set_stop_loss_tool(arguments: dict) -> list[types.TextContent]:
                 }
                 stop_loss_logic = f"Manual monitoring required: {transaction_type} at ₹{stop_loss_price} (LIMIT order placed)"
             else:
-                # For equity/futures, use stop loss orders
                 sl_order_params = {
                     "variety": "regular",
                     "tradingsymbol": tradingsymbol,
@@ -1389,7 +1304,6 @@ async def set_stop_loss_tool(arguments: dict) -> list[types.TextContent]:
                 }
                 
                 if order_type == "SL":
-                    # For SL orders, set price slightly worse than trigger
                     sl_order_params["price"] = stop_loss_price * 0.99 if transaction_type == "SELL" else stop_loss_price * 1.01
             
             sl_order_id = kite.place_order(**sl_order_params)
@@ -1410,7 +1324,6 @@ async def set_stop_loss_tool(arguments: dict) -> list[types.TextContent]:
                      f"{validation_message}"
             )]
         
-        # Place target order if provided
         if target_price:
             try:
                 target_order_params = {
@@ -1434,14 +1347,12 @@ async def set_stop_loss_tool(arguments: dict) -> list[types.TextContent]:
                 })
                 
             except Exception as e:
-                # Stop loss placed but target failed
                 placed_orders.append({
                     "type": "Target",
                     "error": str(e),
                     "price": target_price
                 })
         
-        # Build success response
         response_text = f"✅ **Stop Loss Orders Placed Successfully**\n\n"
         response_text += f"**Position Details:**\n"
         response_text += f"- Symbol: {tradingsymbol}\n"
@@ -1490,13 +1401,10 @@ async def monitor_stop_orders_tool(arguments: dict) -> list[types.TextContent]:
         if not kite:
             init_kite()
         
-        # Get all orders
         all_orders = kite.orders()
         
-        # Filter for stop loss and target orders
         stop_orders = []
         for order in all_orders:
-            # Identify stop loss orders (SL, SL-M) and limit orders that could be targets
             if (order['order_type'] in ['SL', 'SL-M'] or 
                 (order['order_type'] == 'LIMIT' and order['status'] in ['OPEN', 'TRIGGER PENDING'])):
                 
@@ -1514,7 +1422,6 @@ async def monitor_stop_orders_tool(arguments: dict) -> list[types.TextContent]:
                      f"Use `set_stop_loss` to protect your positions."
             )]
         
-        # Group orders by symbol
         orders_by_symbol = {}
         for order in stop_orders:
             symbol = order['tradingsymbol']
@@ -1528,7 +1435,6 @@ async def monitor_stop_orders_tool(arguments: dict) -> list[types.TextContent]:
         for symbol, orders in orders_by_symbol.items():
             response_text += f"**{symbol}:**\n"
             
-            # Get current price
             try:
                 exchange = "NFO" if any(x in symbol for x in ['FUT', 'CE', 'PE']) else "NSE"
                 quote = kite.quote(f"{exchange}:{symbol}")
@@ -1538,7 +1444,6 @@ async def monitor_stop_orders_tool(arguments: dict) -> list[types.TextContent]:
                 current_price = 0
                 response_text += f"- Current Price: Unable to fetch\n"
             
-            # List orders for this symbol
             for order in orders:
                 order_type_desc = "🛡️ Stop Loss" if order['order_type'] in ['SL', 'SL-M'] else "🎯 Target"
                 status_icon = "🟢" if order['status'] == 'OPEN' else "🟡" if order['status'] == 'TRIGGER PENDING' else "🔴"
@@ -1564,7 +1469,6 @@ async def monitor_stop_orders_tool(arguments: dict) -> list[types.TextContent]:
             
             response_text += "\n"
         
-        # Add summary statistics
         sl_orders = [o for o in stop_orders if o['order_type'] in ['SL', 'SL-M']]
         target_orders = [o for o in stop_orders if o['order_type'] == 'LIMIT']
         
@@ -1582,14 +1486,12 @@ async def monitor_stop_orders_tool(arguments: dict) -> list[types.TextContent]:
 
 async def main():
     """Main function to run the server"""
-    # Initialize Kite Connect
     try:
         init_kite()
     except Exception as e:
         logger.error(f"Failed to initialize Kite Connect: {e}")
         return
     
-    # Run the server
     from mcp.server.stdio import stdio_server
     
     async with stdio_server() as (read_stream, write_stream):

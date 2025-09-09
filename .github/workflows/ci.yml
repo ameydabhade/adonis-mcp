@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: [3.8, 3.9, '3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+    
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+    
+    - name: Format check with black
+      run: |
+        black --check --diff .
+    
+    - name: Sort imports check with isort
+      run: |
+        isort --check-only --diff .
+    
+    - name: Type checking with mypy
+      run: |
+        mypy zerodha_mcp_server.py zerodha_mcp_wrapper.py --ignore-missing-imports
+      continue-on-error: true  # Allow to fail for now
+    
+    - name: Security check with bandit
+      run: |
+        bandit -r . -x ./zerodha_mcp_env/
+      continue-on-error: true  # Allow to fail for now
+    
+    - name: Test configuration setup
+      run: |
+        python3 setup.py
+    
+    - name: Test imports
+      run: |
+        python -c "import zerodha_mcp_server; print('✅ Server import successful')"
+        python -c "import zerodha_mcp_wrapper; print('✅ Wrapper import successful')"
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install security tools
+      run: |
+        pip install safety bandit
+    
+    - name: Check for security vulnerabilities
+      run: |
+        safety check --json || true
+        bandit -r . -f json -x ./zerodha_mcp_env/ || true
+
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Check documentation
+      run: |
+        # Check if README has been updated
+        grep -q "Zerodha Kite MCP Server" README.md
+        
+        # Check if all Python files have docstrings
+        python -c "
+        import ast
+        import sys
+        
+        def check_docstrings(filename):
+            with open(filename, 'r') as f:
+                tree = ast.parse(f.read())
+            
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+                    if not ast.get_docstring(node):
+                        print(f'Missing docstring in {filename}: {node.name}')
+                        return False
+            return True
+        
+        files = ['zerodha_mcp_server.py', 'zerodha_mcp_wrapper.py']
+        for file in files:
+            try:
+                check_docstrings(file)
+            except Exception as e:
+                print(f'Error checking {file}: {e}')
+        "
+      continue-on-error: true

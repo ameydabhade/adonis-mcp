@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Risk Management System for Production Trading
 Validates orders, monitors positions, and enforces safety limits
@@ -13,7 +12,6 @@ import logging
 
 from trading_config import config
 
-# Configure logging
 logging.basicConfig(
     level=getattr(logging, config.log_level),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -68,36 +66,28 @@ class RiskManager:
         if config.dry_run_mode:
             logger.info("DRY RUN MODE: Order validation only, no execution")
         
-        # 1. Market hours check
         if not self._check_market_hours():
             return False, "Market is closed for trading"
         
-        # 2. Circuit breaker check
         if self.circuit_breaker_triggered:
             return False, "Circuit breaker active - trading suspended"
         
-        # 3. Daily limits check
         if not self._check_daily_limits():
             return False, "Daily trading limits exceeded"
         
-        # 4. Order rate limiting
         if not self._check_rate_limits():
             return False, "Order rate limit exceeded"
         
-        # 5. Position size validation
         if not self._validate_position_size(order_params):
             return False, "Position size exceeds risk limits"
         
-        # 6. Order value validation
         if not self._validate_order_value(order_params):
             return False, "Order value exceeds maximum allowed"
         
-        # 7. F&O specific validations
         if order_params.get('exchange') == 'NFO':
             if not self._validate_fno_order(order_params):
                 return False, "F&O order validation failed"
         
-        # 8. Cooldown period check
         current_time = time.time()
         if current_time - self.last_order_time < config.risk_limits.cooldown_between_orders:
             return False, f"Cooldown period active, wait {config.risk_limits.cooldown_between_orders} seconds"
@@ -122,13 +112,10 @@ class RiskManager:
         self.daily_trades += 1
         self.last_order_time = time.time()
         
-        # Add to rate limiting tracker
         self.order_timestamps.append(time.time())
         
-        # Log the trade
         logger.info(f"Trade recorded: {trade.symbol} {trade.transaction_type} {trade.quantity} @ {trade.price}")
         
-        # Save trade to file for audit trail
         if config.enable_trade_logging:
             self._save_trade_log(trade)
     
@@ -136,7 +123,6 @@ class RiskManager:
         """Update daily PnL and check risk limits"""
         self.daily_pnl += pnl_change
         
-        # Check for daily loss limit
         if self.daily_pnl <= -config.risk_limits.max_daily_loss:
             self.trigger_circuit_breaker("Daily loss limit exceeded")
         
@@ -148,7 +134,6 @@ class RiskManager:
         logger.critical(f"🚨 CIRCUIT BREAKER TRIGGERED: {reason}")
         logger.critical("All trading suspended until manual reset")
         
-        # Log critical event
         with open("emergency_log.txt", "a") as f:
             f.write(f"{datetime.now()}: CIRCUIT BREAKER - {reason}\n")
     
@@ -193,7 +178,6 @@ class RiskManager:
     def _check_rate_limits(self) -> bool:
         """Check order rate limiting"""
         current_time = time.time()
-        # Clean old timestamps (older than 1 minute)
         self.order_timestamps = [ts for ts in self.order_timestamps if current_time - ts < 60]
         
         if len(self.order_timestamps) >= config.risk_limits.max_orders_per_minute:
@@ -235,12 +219,10 @@ class RiskManager:
         """Additional validations for F&O orders"""
         symbol = order_params.get('tradingsymbol', '')
         
-        # Check for valid F&O symbol format
         if not any(x in symbol for x in ['FUT', 'CE', 'PE']):
             logger.warning(f"Invalid F&O symbol format: {symbol}")
             return False
         
-        # Check for reasonable lot sizes (F&O trades in lots)
         quantity = order_params.get('quantity', 0)
         if quantity > 1000:  # Conservative limit for F&O
             logger.warning(f"F&O quantity {quantity} seems too high")
@@ -267,5 +249,4 @@ class RiskManager:
         except Exception as e:
             logger.error(f"Failed to save trade log: {e}")
 
-# Global risk manager instance
 risk_manager = RiskManager()

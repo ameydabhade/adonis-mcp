@@ -1,7 +1,4 @@
-# Zerodha MCP Server - Git Ignore File
-# =====================================
-
-# Environment and configuration files
+# Environment variables and configuration
 config.env
 .env
 *.env
@@ -24,18 +21,16 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
 # Virtual environments
+zerodha_mcp_env/
 venv/
 env/
 ENV/
-env.bak/
-venv.bak/
 
 # IDE
 .vscode/
@@ -44,7 +39,13 @@ venv.bak/
 *.swo
 *~
 
-# OS
+# Logs and databases
+*.log
+*.db
+*.sqlite3
+trades_audit.jsonl
+
+# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -53,24 +54,14 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-# Logs
-*.log
-logs/
+# Testing
+coverage.xml
+*.cover
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Temporary files
 *.tmp
 *.temp
-
-# API credentials and secrets
-access_token.txt
-api_credentials.json
-secrets.json
-
-# Trading data
-trade_history/
-order_logs/
-*.csv
-
-# Test files
-test_*.py
-*_test.py
+.cache/

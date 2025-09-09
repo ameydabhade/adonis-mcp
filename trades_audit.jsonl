@@ -1,8 +1,0 @@
-{"timestamp": "2025-09-09T13:54:29.656373", "order_id": "250909001041649", "symbol": "RELIANCE", "type": "BUY", "quantity": 1, "price": 1300, "status": "PLACED"}
-{"timestamp": "2025-09-09T14:00:51.792471", "order_id": "FAILED", "symbol": "INFY25SEPFUT", "type": "BUY", "quantity": 50, "price": 0, "status": "ERROR"}
-{"timestamp": "2025-09-09T14:01:01.373774", "order_id": "FAILED", "symbol": "NIFTY25SEPFUT", "type": "BUY", "quantity": 25, "price": 0, "status": "ERROR"}
-{"timestamp": "2025-09-09T14:01:48.639344", "order_id": "250909001060553", "symbol": "INFY25SEP1540CE", "type": "BUY", "quantity": 400, "price": 5, "status": "PLACED"}
-{"timestamp": "2025-09-09T14:04:11.997495", "order_id": "250909001070267", "symbol": "INFY25SEP1400PE", "type": "BUY", "quantity": 400, "price": 5.7, "status": "PLACED"}
-{"timestamp": "2025-09-09T14:07:23.653413", "order_id": "250909001084438", "symbol": "BANKNIFTY25SEP54000PE", "type": "SELL", "quantity": 35, "price": 360, "status": "PLACED"}
-{"timestamp": "2025-09-09T14:08:29.650051", "order_id": "250909001089581", "symbol": "INFY25SEP1500CE", "type": "BUY", "quantity": 400, "price": 36, "status": "PLACED"}
-{"timestamp": "2025-09-09T14:08:47.170634", "order_id": "250909001090518", "symbol": "INFY25SEP1400PE", "type": "BUY", "quantity": 400, "price": 6, "status": "PLACED"}
