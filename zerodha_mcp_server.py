@@ -525,6 +525,7 @@ async def buy_stock_tool(arguments: dict) -> list[types.TextContent]:
         
         # Prepare order parameters
         order_params = {
+            "variety": "regular",
             "tradingsymbol": instrument['tradingsymbol'],
             "exchange": "NSE",
             "transaction_type": "BUY",
@@ -578,6 +579,7 @@ async def sell_stock_tool(arguments: dict) -> list[types.TextContent]:
         
         # Prepare order parameters
         order_params = {
+            "variety": "regular",
             "tradingsymbol": instrument['tradingsymbol'],
             "exchange": "NSE",
             "transaction_type": "SELL",
