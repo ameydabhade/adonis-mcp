@@ -1,4 +1,4 @@
-# Zerodha Kite MCP Server
+# Adonis - Zerodha Trading MCP Server
 
 <div align="center">
 
@@ -8,7 +8,7 @@
 ![Zerodha](https://img.shields.io/badge/Zerodha-Kite%20Connect-red.svg)
 ![Status](https://img.shields.io/badge/status-Production%20Ready-brightgreen.svg)
 
-*A professional Model Context Protocol (MCP) server for Zerodha Kite Connect API*
+*Adonis - A powerful AI trading assistant for the Indian stock market*
 
 [Features](#features) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Examples](#examples) • [Contributing](#contributing)
 
@@ -34,10 +34,10 @@
 
 ## 🚀 Overview
 
-The Zerodha Kite MCP Server provides a robust interface between AI assistants and the Indian stock market through Zerodha's Kite Connect API. Built with the Model Context Protocol (MCP), it enables seamless integration of trading capabilities, market data analysis, and portfolio management into AI workflows.
+Adonis is a sophisticated trading assistant that bridges AI systems with the Indian stock market through Zerodha's Kite Connect API. Built on the Model Context Protocol (MCP), Adonis enables seamless integration of trading capabilities, real-time market analysis, and intelligent portfolio management into AI workflows.
 
 ### What is MCP?
-The Model Context Protocol (MCP) is an open standard that enables AI assistants to securely access external data sources and tools. This server implements MCP to provide AI systems with comprehensive trading capabilities.
+The Model Context Protocol (MCP) is an open standard that enables AI assistants to securely access external data sources and tools. Adonis implements MCP to provide AI systems with comprehensive trading capabilities and market intelligence.
 
 ## ✨ Features
 
@@ -65,8 +65,8 @@ The Model Context Protocol (MCP) is an open standard that enables AI assistants 
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/zerodha-kite-mcp-server.git
-cd zerodha-kite-mcp-server
+git clone https://github.com/yourusername/adonis-trading-mcp.git
+cd adonis-trading-mcp
 
 # Run the installation script
 chmod +x install.sh
@@ -118,11 +118,11 @@ Add to your MCP client configuration (e.g., Claude Desktop):
 ```json
 {
   "mcpServers": {
-    "zerodha-kite": {
+    "adonis": {
       "command": "python3",
-      "args": ["/path/to/zerodha-kite-mcp-server/zerodha_mcp_server.py"],
+      "args": ["/path/to/adonis-trading-mcp/zerodha_mcp_server.py"],
       "env": {
-        "PATH": "/path/to/zerodha-kite-mcp-server/zerodha_mcp_env/bin"
+        "PATH": "/path/to/adonis-trading-mcp/zerodha_mcp_env/bin"
       }
     }
   }
@@ -414,7 +414,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Get Help
 
 - 📖 **Documentation**: Check our comprehensive guides
-- 💬 **Issues**: [GitHub Issues](https://github.com/yourusername/zerodha-kite-mcp-server/issues)
+- 💬 **Issues**: [GitHub Issues](https://github.com/yourusername/adonis-trading-mcp/issues)
 - 📧 **Email**: support@example.com
 - 💬 **Discord**: [Join our community](https://discord.gg/example)
 
@@ -436,6 +436,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Built with ❤️ for algorithmic trading and market analysis**
 
-[⭐ Star this repository](https://github.com/yourusername/zerodha-kite-mcp-server) if it helped you!
+[⭐ Star this repository](https://github.com/yourusername/adonis-trading-mcp) if it helped you!
 
 </div>

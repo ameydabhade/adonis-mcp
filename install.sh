@@ -1,5 +1,5 @@
-echo "🚀 Installing Zerodha Kite MCP Server"
-echo "======================================"
+echo "🚀 Installing Adonis - Trading MCP Server"
+echo "========================================"
 
 if ! command -v python3 &> /dev/null; then
     echo "❌ Python 3 is required but not found"

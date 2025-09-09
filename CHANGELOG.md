@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Renamed project to "Adonis" - Trading MCP Server
 - Comprehensive README with GitHub-ready formatting
 - Professional badges and documentation structure
 - Contributing guidelines and code of conduct
@@ -28,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2025-09-09
 
 ### Added
-- Initial release of Zerodha Kite MCP Server
+- Initial release of Adonis - Trading MCP Server
 - 12 comprehensive MCP tools for trading
 - Real-time market data integration
 - F&O (Futures & Options) support
@@ -88,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Version 1.0.0 Highlights
 
-This is the first production-ready release of the Zerodha Kite MCP Server. Key highlights include:
+This is the first production-ready release of Adonis - Trading MCP Server. Key highlights include:
 
 🚀 **Production Ready**: Fully tested and operational with comprehensive error handling
 📈 **Complete Trading Suite**: 12 MCP tools covering all aspects of trading
@@ -123,4 +124,4 @@ This is the first production-ready release of the Zerodha Kite MCP Server. Key h
 
 ---
 
-For more details about any release, please check the [GitHub releases page](https://github.com/yourusername/zerodha-kite-mcp-server/releases).
+For more details about any release, please check the [GitHub releases page](https://github.com/yourusername/adonis-trading-mcp/releases).

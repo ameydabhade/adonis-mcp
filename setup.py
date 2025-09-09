@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 def main():
-    print("🚀 Zerodha Kite MCP Server Setup")
+    print("🚀 Adonis - Trading MCP Server Setup")
     print("=" * 40)
     
     if not os.path.exists("config.env"):

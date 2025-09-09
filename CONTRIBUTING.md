@@ -1,6 +1,6 @@
-# Contributing to Zerodha Kite MCP Server
+# Contributing to Adonis
 
-Thank you for your interest in contributing to the Zerodha Kite MCP Server! We welcome contributions from the community and are grateful for your support.
+Thank you for your interest in contributing to Adonis - Trading MCP Server! We welcome contributions from the community and are grateful for your support.
 
 ## Table of Contents
 
@@ -39,8 +39,8 @@ This project adheres to a Code of Conduct. By participating, you are expected to
 1. **Fork the repository**
    ```bash
    # Fork on GitHub, then clone your fork
-   git clone https://github.com/yourusername/zerodha-kite-mcp-server.git
-   cd zerodha-kite-mcp-server
+   git clone https://github.com/yourusername/adonis-trading-mcp.git
+   cd adonis-trading-mcp
    ```
 
 2. **Set up development environment**
@@ -195,7 +195,7 @@ def get_market_data(symbol: str) -> dict:
 ### Code Organization
 
 ```
-zerodha-kite-mcp-server/
+adonis-trading-mcp/
 ├── zerodha_mcp_server.py      # Main server implementation
 ├── zerodha_mcp_wrapper.py     # MCP wrapper
 ├── risk_manager.py            # Risk management
