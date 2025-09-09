@@ -1,5 +1,3 @@
-
-
 echo "🚀 Installing Zerodha Kite MCP Server"
 echo "======================================"
 

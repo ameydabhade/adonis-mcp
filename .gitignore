@@ -1,9 +1,7 @@
-# Environment variables and configuration
 config.env
 .env
 *.env
 
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -26,26 +24,22 @@ wheels/
 *.egg
 MANIFEST
 
-# Virtual environments
 zerodha_mcp_env/
 venv/
 env/
 ENV/
 
-# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Logs and databases
 *.log
 *.db
 *.sqlite3
 trades_audit.jsonl
 
-# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -54,14 +48,12 @@ trades_audit.jsonl
 ehthumbs.db
 Thumbs.db
 
-# Testing
 coverage.xml
 *.cover
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Temporary files
 *.tmp
 *.temp
 .cache/
