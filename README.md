@@ -1,255 +1,124 @@
-# Zerodha Kite Connect MCP Server
+# Zerodha Kite MCP Server
 
-A comprehensive Model Context Protocol (MCP) server for interacting with Zerodha's Kite Connect API. This server provides intelligent stock market analysis with sequential thinking capabilities, real-time data fetching, and automated trading functions.
+A Model Context Protocol (MCP) server for Zerodha Kite Connect API that provides tools for stock trading, market data analysis, and portfolio management with sequential thinking capabilities.
 
-## 🚀 Features
+## Features
 
-### Core Tools
-1. **📈 Fetch Data** - Real-time and historical market data for NIFTY, stocks, and indices
-2. **🧠 Analyze Data** - Advanced sequential thinking analysis of market trends
-3. **👁️ Monitor Orders** - Real-time order tracking and status updates
-4. **💰 Buy Stock** - Automated buy order placement
-5. **💸 Sell Stock** - Automated sell order placement
+- **Real-time Market Data**: Fetch live stock prices, quotes, and historical data
+- **Sequential Thinking Analysis**: AI-powered technical analysis with step-by-step reasoning
+- **Order Management**: Place buy/sell orders and monitor execution
+- **Portfolio Tracking**: Monitor positions and account status
+- **5 MCP Tools**: Complete trading toolkit accessible via MCP clients
 
-### Key Capabilities
-- **Sequential Thinking Analysis**: Multi-step reasoning process for market analysis
-- **Real-time Data**: Live quotes, historical data, and market indicators
-- **Order Management**: Complete order lifecycle management
-- **Risk Assessment**: Built-in volatility and trend analysis
-- **Smart Recommendations**: AI-driven buy/sell/hold recommendations
+## Quick Start
 
-## 📋 Prerequisites
-
-1. **Zerodha Kite Connect Account**
-   - Sign up at [Kite Connect](https://kite.trade/connect/login)
-   - Create an app to get API credentials
-
-2. **Python 3.8+**
-
-3. **Environment Setup**
-   - Your `config.env` file with Kite Connect credentials
-
-## 🛠️ Installation
-
-1. **Clone/Download the repository**
-   ```bash
-   cd /path/to/your/zerodha-mcp
-   ```
-
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Configure credentials** (already done in your `config.env`)
-   ```env
-   KITE_API_KEY=your_api_key
-   KITE_API_SECRET=your_api_secret
-   KITE_ACCESS_TOKEN=your_access_token
-   ```
-
-## 🏃‍♂️ Usage
-
-### Running the MCP Server
-
+### 1. Setup Environment
 ```bash
-python zerodha_mcp_server.py
+source zerodha_mcp_env/bin/activate
 ```
 
-### Available Tools
-
-#### 1. Fetch Data
-```json
-{
-  "name": "fetch_data",
-  "parameters": {
-    "symbol": "NIFTY 50",
-    "exchange": "NSE",
-    "interval": "day",
-    "days": 30
-  }
-}
+### 2. Configure API Credentials
+Update `config.env` with your Zerodha Kite Connect credentials:
+```bash
+KITE_API_KEY=your_api_key_here
+KITE_API_SECRET=your_api_secret_here
 ```
 
-**Parameters:**
-- `symbol`: Trading symbol (e.g., "NIFTY 50", "RELIANCE", "TCS")
-- `exchange`: Exchange (NSE, BSE, MCX) - Default: NSE
-- `interval`: Time interval (minute, day, 3minute, 5minute, etc.) - Default: day
-- `days`: Number of days of historical data - Default: 30
-
-#### 2. Analyze Data with Sequential Thinking
-```json
-{
-  "name": "analyze_data",
-  "parameters": {
-    "symbol": "RELIANCE",
-    "analysis_type": "technical"
-  }
-}
+### 3. Generate Access Token
+```bash
+python3 generate_access_token.py
 ```
 
-**Features:**
-- Step-by-step thinking process
-- Price movement analysis
-- Historical trend evaluation
-- Volume pattern assessment
-- Final trading recommendation
-
-#### 3. Monitor Orders
-```json
-{
-  "name": "monitor_orders",
-  "parameters": {
-    "order_id": "optional_specific_order_id"
-  }
-}
+### 4. Test Connection
+```bash
+python3 test_connection.py
 ```
 
-#### 4. Buy Stock
-```json
-{
-  "name": "buy_stock",
-  "parameters": {
-    "symbol": "TCS",
-    "quantity": 10,
-    "order_type": "MARKET",
-    "product": "CNC"
-  }
-}
+### 5. Start MCP Server
+```bash
+python3 zerodha_mcp_server.py
 ```
 
-#### 5. Sell Stock
-```json
-{
-  "name": "sell_stock",
-  "parameters": {
-    "symbol": "TCS",
-    "quantity": 10,
-    "order_type": "LIMIT",
-    "price": 3500.00,
-    "product": "CNC"
-  }
-}
-```
+## Available Tools
 
-## 🧠 Sequential Thinking Analysis
+### 📈 fetch_data
+Fetch real-time and historical stock/index data
+- **Parameters**: symbol, exchange, interval, days
+- **Returns**: Current price, volume, historical OHLC data, market depth
 
-The MCP server includes a sophisticated sequential thinking analyzer that processes market data through multiple reasoning steps:
+### 🧠 analyze_data  
+Analyze stock data using sequential thinking process
+- **Parameters**: symbol, analysis_type
+- **Returns**: Step-by-step analysis with BUY/SELL/HOLD recommendation
 
-### Analysis Steps:
-1. **Current Price Analysis** - Evaluates current price movement and momentum
-2. **Historical Trend Analysis** - Examines 5-day price patterns and volatility
-3. **Volume Analysis** - Assesses trading volume relative to averages
-4. **Final Recommendation** - Synthesizes all data into actionable insights
+### 👁️ monitor_orders
+Monitor placed orders and their execution status
+- **Parameters**: order_id (optional)
+- **Returns**: Order status, execution details, timestamps
 
-### Sample Output:
-```
-🧠 Sequential Thinking Analysis for RELIANCE
+### 💰 buy_stock
+Place buy orders for stocks
+- **Parameters**: symbol, quantity, order_type, price, product
+- **Returns**: Order confirmation with order_id
 
-## Thinking Process:
-Step 1: Analyzing current price movement
-Analysis: Current Price: ₹2,456.75, Previous Close: ₹2,445.20, Change: 0.47%
-Conclusion: Current price momentum established
-Next Action: Analyze historical trends
+### 💸 sell_stock
+Place sell orders for stocks  
+- **Parameters**: symbol, quantity, order_type, price, product
+- **Returns**: Order confirmation with order_id
 
-Step 2: Examining 5-day historical trend pattern
-Analysis: 5-day trend: Upward, Recent volatility: ₹45.30
-Conclusion: Stock shows upward momentum with moderate volatility
-Next Action: Evaluate volume patterns
+## Example Usage
 
-## Final Recommendation:
-Action: HOLD
-Reasoning: Neutral momentum, wait for clearer signals
-Suggested Action: Monitor for breakout or breakdown signals
-```
-
-## 🔒 Security Notes
-
-- **Never commit `config.env`** to version control
-- **Regenerate access tokens daily** for security
-- **Use paper trading** for testing before live trades
-- **Monitor API rate limits** to avoid restrictions
-
-## 📊 Example Workflows
-
-### 1. Daily Market Analysis
 ```python
-# Fetch NIFTY data
-fetch_data(symbol="NIFTY 50", days=5)
+# Fetch RELIANCE stock data
+fetch_data(symbol="RELIANCE", exchange="NSE", days=5)
 
 # Analyze with sequential thinking
-analyze_data(symbol="NIFTY 50")
+analyze_data(symbol="RELIANCE", analysis_type="technical")
 
-# Check current positions
+# Place buy order
+buy_stock(symbol="TCS", quantity=10, order_type="MARKET")
+
+# Monitor orders
 monitor_orders()
 ```
 
-### 2. Stock Trading Flow
-```python
-# Research stock
-fetch_data(symbol="RELIANCE", days=10)
-analyze_data(symbol="RELIANCE")
+## Sequential Thinking Process
 
-# Place order based on analysis
-buy_stock(symbol="RELIANCE", quantity=5, order_type="MARKET")
+The analyze_data tool uses a 4-step sequential thinking approach:
 
-# Monitor the order
-monitor_orders(order_id="order_id_returned")
-```
+1. **Current Price Analysis**: Evaluates price movement vs previous close
+2. **Historical Trend Analysis**: Examines multi-day patterns and volatility
+3. **Volume Analysis**: Compares current vs average volume for sentiment
+4. **Final Recommendation**: Synthesizes analysis into actionable BUY/SELL/HOLD decision
 
-## 🐛 Troubleshooting
+## Files Overview
 
-### Common Issues:
+- `zerodha_mcp_server.py` - Main MCP server implementation
+- `config.env` - API credentials configuration
+- `generate_access_token.py` - Daily access token generator
+- `test_connection.py` - Connection verification tool
+- `requirements.txt` - Python dependencies
+- `TESTING_RESULTS.md` - Comprehensive test results
 
-1. **Authentication Error**
-   - Check if access token is valid (regenerate daily)
-   - Verify API key and secret in config.env
+## Requirements
 
-2. **Symbol Not Found**
-   - Use exact trading symbols (e.g., "RELIANCE" not "Reliance Industries")
-   - Check if symbol is available on the specified exchange
+- Python 3.13+
+- Active Zerodha Kite Connect account
+- Valid API key and secret from Kite Connect app
 
-3. **Order Placement Failed**
-   - Ensure sufficient margin/balance
-   - Check market hours (9:15 AM - 3:30 PM IST)
-   - Verify order parameters
+## Security
 
-4. **Rate Limiting**
-   - Kite Connect has API rate limits
-   - Add delays between requests if needed
+- Keep `config.env` secure and never commit to version control
+- Access tokens expire daily and need regeneration
+- Use sandbox credentials for testing
 
-## 📈 Advanced Features
+## Status
 
-### Custom Analysis Types
-- Technical analysis with indicators
-- Fundamental analysis integration
-- Sentiment analysis capabilities
-
-### Risk Management
-- Built-in stop-loss recommendations
-- Position sizing suggestions
-- Volatility-based risk assessment
-
-## 🔧 Development
-
-### Adding New Tools
-1. Define tool in `handle_list_tools()`
-2. Implement handler in `handle_call_tool()`
-3. Add sequential thinking logic if needed
-
-### Extending Analysis
-- Modify `SequentialAnalyzer` class
-- Add new thinking steps
-- Implement custom indicators
-
-## 📄 License
-
-This project is for educational and personal use. Please comply with Zerodha's API terms of service.
-
-## 🤝 Contributing
-
-Feel free to submit issues and enhancement requests!
+✅ **Production Ready** - Fully tested and operational
+✅ **Live Market Data** - Real-time price and volume data
+✅ **Sequential Analysis** - AI-powered trading recommendations
+✅ **Error Handling** - Robust error management and graceful failures
 
 ---
 
-**⚠️ Disclaimer**: This software is for educational purposes. Trading involves risk. Always do your own research and consider consulting with a financial advisor before making investment decisions.
+Built with ❤️ for algorithmic trading and market analysis
